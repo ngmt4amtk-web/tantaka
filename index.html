@@ -1445,22 +1445,79 @@ function onTap(ev, pad){
   if(S.tapSound) Audio_.click(t + 0.005, 'tap');
   markHit(t);
 }
-/* 叩いた「事実」だけを譜面の下に出す。正誤の色はここでは付けない
-   （叩いている最中に評価を出すと、注意が判定へ向いてリズムが崩れる） */
+/* 叩いたタイミングを譜面の上に出す。
+   ・叩いた瞬間は「叩いた事実」だけ（正誤の色は出さない。演奏中に評価すると注意がそちらへ向く）
+   ・印の横位置は、実際に叩いた時刻。ズレを拡大して置くので、早い/遅いが目で見える
+   ・演奏が終わってから、結果に応じて色が付く */
+const HIT_ZOOM = 3.2;                    // ズレを何倍に拡大して見せるか
 function markHit(t){
-  if(!S.beatX || !S.beatX.length) return;
+  if(!S.marks || !S.marks.length || !S.t0) return;
   const beat = spb();
-  const pos = (t - S.t0)/beat;                    // 拍単位
-  const inBar = pos % (S.bars*MT.count);
+  const posBeat = (t - S.t0) / beat;                    // 叩いた位置（主拍単位）
   let best=null, bd=1e9;
-  S.beatX.forEach(m=>{ const d=Math.abs(m.beat - Math.round(inBar*2)/2); if(d<bd){bd=d; best=m;} });
-  if(!best || bd>0.75) return;
+  S.marks.forEach(m=>{
+    const mb = m.t / MT.beat;
+    const d = Math.abs(mb - posBeat);
+    if(d < bd){ bd = d; best = m; }
+  });
+  if(!best || bd > 1.2) return;                          // どの音符からも遠すぎる
+  const bestBeat = best.t / MT.beat;
+  // 隣の音符までの間隔を基準に、ズレを拡大して横へずらす
+  let gap = 1;
+  S.marks.forEach(m=>{ const d=Math.abs(m.t/MT.beat - bestBeat); if(d>0.001 && d<gap) gap=d; });
+  const pxPerBeat = 26 / Math.max(gap, 0.25);
+  const dx = Math.max(-22, Math.min(22, (posBeat - bestBeat) * pxPerBeat * HIT_ZOOM));
   const ns='http://www.w3.org/2000/svg';
+  const g=document.createElementNS(ns,'g');
+  g.setAttribute('class','hitmark');
+  g.dataset.t = String(t);          // 叩いた時刻。結果の色付けで突き合わせる
   const c=document.createElementNS(ns,'circle');
-  c.setAttribute('cx', best.x + 14); c.setAttribute('cy', best.y + 20);
-  c.setAttribute('r', 3.2); c.setAttribute('fill','currentColor'); c.setAttribute('opacity','.45');
-  c.setAttribute('class','hitmark');
-  el.score.appendChild(c);
+  c.setAttribute('cx', best.x + dx); c.setAttribute('cy', best.y - 21);
+  c.setAttribute('r', 4.2); c.setAttribute('fill','currentColor'); c.setAttribute('opacity','.42');
+  g.appendChild(c);
+  el.score.appendChild(g);
+  // 叩いた瞬間、いちばん近い音符を光らせる
+  const ring=document.createElementNS(ns,'circle');
+  ring.setAttribute('cx', best.x); ring.setAttribute('cy', best.y);
+  ring.setAttribute('r', 9); ring.setAttribute('fill','none');
+  ring.setAttribute('stroke','currentColor'); ring.setAttribute('stroke-width','2'); ring.setAttribute('opacity','.5');
+  ring.setAttribute('class','hitring');
+  el.score.appendChild(ring);
+  setTimeout(()=>ring.remove(), 260);
+}
+/* 判定が出たら、印に色を付ける（緑=範囲内、オレンジ=外れ、赤=余分） */
+function paintHits(res, diffs, usePhase, W, exp, act){
+  const marks = [...el.score.querySelectorAll('.hitmark')];
+  const beat = spb();
+  const kindOf = new Map();
+  res.pairs.forEach(([i,j],k)=>{
+    kindOf.set(j, Math.abs(diffs[k]-usePhase) <= W ? 'ok' : 'off');
+  });
+  res.extra.forEach(j=> kindOf.set(j, 'extra'));
+  // 印が持つ時刻で対応させる（順序に頼らない）
+  marks.forEach(g=>{
+    const gt = Number(g.dataset.t);
+    let idx = -1, bd = 1e9;
+    act.forEach((a,j)=>{ const d = Math.abs((a + (S.calib||0)) - gt); if(d < bd){ bd = d; idx = j; } });
+    const kind = kindOf.get(idx) || 'off';
+    const col = kind==='ok' ? 'var(--good)' : (kind==='extra' ? 'var(--bad)' : 'var(--warn)');
+    const c = g.querySelector('circle');
+    if(c){ c.setAttribute('fill', col); c.setAttribute('opacity','.95'); }
+  });
+  // 抜けた音符には、下に薄い輪郭だけ置く
+  res.missed.forEach(i=>{
+    const b = S.expected[i];
+    let best=null, bd=1e9;
+    S.marks.forEach(m=>{ const d=Math.abs(m.t/MT.beat - b); if(d<bd){bd=d; best=m;} });
+    if(!best) return;
+    const ns='http://www.w3.org/2000/svg';
+    const c=document.createElementNS(ns,'circle');
+    c.setAttribute('cx', best.x); c.setAttribute('cy', best.y - 21);
+    c.setAttribute('r', 4.2); c.setAttribute('fill','none');
+    c.setAttribute('stroke','var(--bad)'); c.setAttribute('stroke-width','1.5');
+    c.setAttribute('stroke-dasharray','2 2'); c.setAttribute('class','hitmark');
+    el.score.appendChild(c);
+  });
 }
 
 /* ---------- 判定 ---------- */
@@ -1531,6 +1588,8 @@ function finish(){
     phase:Math.round(phase*1000), slope: sl===null?null:Math.round(sl*1000*10)/10,
     mad:Math.round(spread*1000)});
   save();
+
+  paintHits(res, diffs, usePhase, W, exp, act);
 
   // ---- 子どもへは「ひとこと」だけ ----
   // 優先: 構造 → 位相 → 傾き → ばらつき
