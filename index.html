@@ -1026,7 +1026,7 @@ function renderEvents(ev, opts){
       const x = X(n.t), e = n.e;
       if(e.rest){
         s += drawRest(x, y, e.d, opts.bare ? 0 : beatW[beatIndexOf(n.t)]);
-        if(opts.chant) s += chantText(x, y, 'ウン');
+        if(opts.chant) s += chantText(x, y, restSyllable(n.t - beatStartOf(beatIndexOf(n.t)), e.d));
         return;
       }
       s += drawNote(x, y, e.d, !inGroup.has(n.t));
@@ -1073,16 +1073,25 @@ function renderEvents(ev, opts){
   return {svg:s, height:H, viewBox:`0 0 ${SC.W} ${H}`, marks};
 }
 
-/* 口唱歌の音節。拍の中のどこにいるかで「タ」と「カ」が決まり、
-   音価で伸ばし方が決まる。（16分の2つ目・4つ目だけが「カ」） */
+/* 口唱歌の音節。2つの軸で決まる。
+   ・拍の中のどこか → 頭の子音（音符は タ／カ、休符は ウ／ン）
+     8分の位置（0,6,12…）は「タ・ウ」、その間の16分は「カ・ン」
+   ・音価 → 伸ばし方（長いほど伸ばす）
+   休符も音符と同じ規則で伸ばす。全部「ウン」ではない。 */
+function tail(d){
+  if(d >= 48) return 'ーーー';      // 4拍
+  if(d >= 36) return 'ーー';        // 3拍
+  if(d >= 24) return 'ー';          // 2拍
+  if(d >= 18) return 'ーン';        // 1拍半
+  if(d >= 12) return 'ン';          // 1拍
+  if(d >= 9)  return 'ッ';          // 4分の3拍
+  return '';                        // 半拍以下はそのまま
+}
 function syllable(tickInBeat, d){
-  const base = (tickInBeat % 6 === 0) ? 'タ' : 'カ';
-  if(d >= 36) return base + 'ーー';
-  if(d >= 24) return base + 'ー';
-  if(d >= 18) return base + 'ーン';
-  if(d >= 12) return base + 'ン';
-  if(d >= 9)  return base + 'ッ';
-  return base;
+  return ((tickInBeat % 6 === 0) ? 'タ' : 'カ') + tail(d);
+}
+function restSyllable(tickInBeat, d){
+  return ((tickInBeat % 6 === 0) ? 'ウ' : 'ン') + tail(d);
 }
 function chantText(x, y, t){
   return `<text x="${x}" y="${y+19}" font-size="10.5" fill="currentColor" fill-opacity=".62" text-anchor="middle">${t}</text>`;
@@ -1233,12 +1242,11 @@ function setBeatDot(n){
    ラベルは表示用であって、判定には一切使わない */
 function chantOf(){
   if(!S.ev) return '';
-  const nm = d => d>=48?'ター(4拍)':d>=36?'ター(3拍)':d>=24?'ター(2拍)':d>=18?'ター(1拍半)'
-                 :d>=12?'タン':d>=9?'ターン':d>=6?'タ':'カ';
   let t=0; const out=[];
   S.ev.forEach(e=>{
-    out.push(e.rest ? 'ウン' : (e.tie ? 'ー' : nm(e.d)));
-    t+=e.d;
+    const inBeat = (t % MT.bar) - beatStartOf(beatIndexOf(t % MT.bar));
+    out.push(e.tie ? 'ー' : (e.rest ? restSyllable(inBeat, e.d) : syllable(inBeat, e.d)));
+    t += e.d;
   });
   return out.join(' ');
 }
