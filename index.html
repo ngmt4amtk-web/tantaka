@@ -561,12 +561,12 @@ const METERS = {
   '3/4' : {num:3,  den:4, beat:12, bar:36, groups:[12,12,12],    count:3, sub:'4分'},
   '2/4' : {num:2,  den:4, beat:12, bar:24, groups:[12,12],       count:2, sub:'4分'},
   '2/2' : {num:2,  den:2, beat:24, bar:48, groups:[24,24],       count:2, sub:'2分'},
-  '6/8' : {num:6,  den:8, beat:18, bar:36, groups:[18,18],       count:2, sub:'付点4分'},
-  '9/8' : {num:9,  den:8, beat:18, bar:54, groups:[18,18,18],    count:3, sub:'付点4分'},
-  '12/8': {num:12, den:8, beat:18, bar:72, groups:[18,18,18,18], count:4, sub:'付点4分'},
+  '6/8' : {num:6,  den:8, beat:6,  bar:36, groups:[18,18],       count:6, sub:'8分'},
+  '9/8' : {num:9,  den:8, beat:6,  bar:54, groups:[18,18,18],    count:9, sub:'8分'},
+  '12/8': {num:12, den:8, beat:6,  bar:72, groups:[18,18,18,18], count:12, sub:'8分'},
   '3/8' : {num:3,  den:8, beat:6,  bar:18, groups:[6,6,6],       count:3, sub:'8分'},
   '5/4' : {num:5,  den:4, beat:12, bar:60, groups:[12,12,12,12,12], count:5, sub:'4分'},
-  '7/8' : {num:7,  den:8, beat:6,  bar:42, groups:[18,12,12],    count:3, sub:'8分'}
+  '7/8' : {num:7,  den:8, beat:6,  bar:42, groups:[18,12,12],    count:7, sub:'8分'}
 };
 const METER_ORDER = ['4/4','3/4','2/4','6/8','2/2','9/8','12/8','3/8','5/4','7/8'];
 let MT = METERS['4/4'];                       // 現在の拍子
@@ -1280,15 +1280,22 @@ function newQuestion(){
 /* ---------- クリックを鳴らす条件 ---------- */
 function metronomeEvents(startT){
   const total = S.bars*MT.count*S.reps, ev=[];
+  /* まとまりの頭を中アクセントにする。ただし「まとまり＝1拍」の拍子（4/4など）では
+     全部が頭になってしまうので、まとまりが1拍より大きいときだけ（6/8など）。 */
+  const groupHeads = new Set();
+  if(MT.groups[0] > MT.beat){
+    let acc=0; MT.groups.forEach(g=>{ groupHeads.add(Math.round(acc/MT.beat)); acc+=g; });
+  }
   for(let b=0; b<total; b++){
-    const isDown = (b % MT.count)===0;
+    const inBar = b % MT.count;
+    const isDown = inBar===0 || groupHeads.has(inBar);
     const half = b >= total/2;
     let on = false;
     if(S.cond==='all') on = true;
     else if(S.cond==='down') on = isDown;
     else if(S.cond==='half') on = !half;
     else if(S.cond==='none') on = false;
-    if(on) ev.push({t: startT + b*spb(), type: isDown?'down':'beat'});
+    if(on) ev.push({t: startT + b*spb(), type: (inBar===0 ? 'down' : (isDown ? 'down' : 'beat'))});
   }
   return ev;
 }
@@ -1414,8 +1421,16 @@ function onTap(ev, pad){
     pad.appendChild(rip); setTimeout(()=>rip.remove(), 460);
   }
   if(S.phase==='calib'){ calibTap(); return; }
-  if(S.phase!=='play') return;
   const t = Audio_.now();
+  /* 本編に入る判定は毎フレームの見回りでやっているので、1拍目ちょうどに叩くと
+     まだ countin のまま捨てられることがあった。開始の少し前から受け付ける。
+     （早すぎるタップは判定の窓で落ちるので、拾っておくのが正しい） */
+  if(S.phase === 'countin' && t > S.t0 - 0.30){
+    S.phase = 'play';
+    el.big.className='big'; el.big.textContent='あなた';
+    el.hitote.textContent='';
+  }
+  if(S.phase!=='play') return;
   S.taps.push(t);
   if(S.tapSound) Audio_.click(t + 0.005, 'tap');
   markHit(t);
@@ -1755,7 +1770,7 @@ function syncMeterUI(){
   [...($('#segMeter')||{children:[]}).children].forEach(x=> x.setAttribute('aria-pressed', String(x.dataset.v===S.meter)));
   const n = $('#meterNote');
   if(n) n.innerHTML = `<b>${S.meter}</b> は1小節に <b>${MT.count}拍</b>。1拍は <b>${MT.sub}音符</b>。`
-    + (MT.den===8 && MT.beat===18 ? '<br>8分音符3つでひとまとまり。数えるのは大きい2拍（または3拍）のほう。' : '')
+    + (MT.den===8 && MT.groups[0]===18 ? `<br>数えるのは1〜${MT.count}。連桁は8分3つずつで束ねる（大きく感じるなら${MT.groups.length}つ振り）。` : '')
     + `<br>BPMは<b>この1拍</b>の速さ。`;
   if($('#btnCall')) $('#btnCall').setAttribute('aria-pressed', String(S.call));
 }
