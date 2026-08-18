@@ -29,7 +29,8 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 .topbar{flex:0 0 auto; background:var(--bar); border-bottom:1px solid var(--line);
   padding:calc(env(safe-area-inset-top) + 8px) 12px 10px}
 .tb1{display:flex; align-items:center; justify-content:center; position:relative; min-height:36px}
-.meter{font-size:19px; font-weight:700; color:var(--accent); letter-spacing:.02em}
+.meter{font-size:19px; font-weight:700; color:var(--accent); letter-spacing:.02em; padding:4px 12px; border-radius:9px}
+.meter:active{background:var(--accent-soft)}
 .meter span{font-size:12px; margin-left:3px; color:var(--accent); opacity:.75}
 .gear{position:absolute; right:0; top:50%; transform:translateY(-50%);
   width:38px; height:38px; border-radius:50%; background:var(--card2); display:grid; place-items:center; font-size:16px; color:var(--ink2)}
@@ -160,7 +161,7 @@ table.det td{font-variant-numeric:tabular-nums}
 <div class="topbar">
   <div class="tb1">
     <button class="back" id="btnBack" hidden>‹</button>
-    <div class="meter" id="meterLabel">4<span>/4</span></div>
+    <button class="meter" id="meterLabel">4<span>/4</span></button>
     <button class="gear" id="btnSet" aria-label="設定">⚙</button>
     <div class="topright" id="playTopRight" hidden><button id="btnCall" aria-pressed="false">お手本</button></div>
   </div>
@@ -191,6 +192,7 @@ table.det td{font-variant-numeric:tabular-nums}
   </div>
   <div class="playacts">
     <button class="pbtn primary" id="btnMain">スタート</button>
+    <button class="pbtn" id="btnAgain" hidden>もう一度</button>
     <button class="pbtn thin" id="btnDetail" hidden>くわしく</button>
   </div>
 </div>
@@ -208,6 +210,15 @@ table.det td{font-variant-numeric:tabular-nums}
     <button class="pbtn thin" id="mkShare">リンク</button>
   </div>
 </div>
+</div>
+
+<!-- ===== 拍子シート ===== -->
+<div class="sheet" id="sheetMeter">
+ <div class="sheetbody">
+  <div class="sheeth"><h2>拍子</h2><button id="closeMeter">✕</button></div>
+  <div class="seg" id="segMeter" style="margin-top:8px"></div>
+  <p class="note" id="meterNote"></p>
+ </div>
 </div>
 
 <!-- ===== 設定シート ===== -->
@@ -540,10 +551,38 @@ const DUR = {
 };
 const DUR_ORDER = ['w','h','qd','q','ed','e','s'];
 
+/* =========================================================================
+   拍子。4分音符=12ティック。
+   beat = 感じる拍（主拍）のティック数。6/8 の主拍は付点4分(18)であって8分ではない。
+   groups = 連桁と拍のまとまり。6/8 は8分3つずつで束ねる。
+   ========================================================================= */
+const METERS = {
+  '4/4' : {num:4,  den:4, beat:12, bar:48, groups:[12,12,12,12], count:4, sub:'4分'},
+  '3/4' : {num:3,  den:4, beat:12, bar:36, groups:[12,12,12],    count:3, sub:'4分'},
+  '2/4' : {num:2,  den:4, beat:12, bar:24, groups:[12,12],       count:2, sub:'4分'},
+  '2/2' : {num:2,  den:2, beat:24, bar:48, groups:[24,24],       count:2, sub:'2分'},
+  '6/8' : {num:6,  den:8, beat:18, bar:36, groups:[18,18],       count:2, sub:'付点4分'},
+  '9/8' : {num:9,  den:8, beat:18, bar:54, groups:[18,18,18],    count:3, sub:'付点4分'},
+  '12/8': {num:12, den:8, beat:18, bar:72, groups:[18,18,18,18], count:4, sub:'付点4分'},
+  '3/8' : {num:3,  den:8, beat:6,  bar:18, groups:[6,6,6],       count:3, sub:'8分'},
+  '5/4' : {num:5,  den:4, beat:12, bar:60, groups:[12,12,12,12,12], count:5, sub:'4分'},
+  '7/8' : {num:7,  den:8, beat:6,  bar:42, groups:[18,12,12],    count:3, sub:'8分'}
+};
+const METER_ORDER = ['4/4','3/4','2/4','6/8','2/2','9/8','12/8','3/8','5/4','7/8'];
+let MT = METERS['4/4'];                       // 現在の拍子
+function setMeter(name){ MT = METERS[name] || METERS['4/4']; return MT; }
+/* 小節内ティック → 何拍目か（0起点）。groups が不揃いな拍子でも正しく出る */
+function beatIndexOf(tick){
+  let acc=0;
+  for(let i=0;i<MT.groups.length;i++){ acc += MT.groups[i]; if(tick < acc) return i; }
+  return MT.groups.length-1;
+}
+function beatStartOf(i){ let a=0; for(let k=0;k<i;k++) a+=MT.groups[k]; return a; }
+
 /* イベント: {d: ティック, rest: 休符か, tie: 前の音と繋がるか} */
-function evOnsets(ev){                       // 打点（4分音符=1 の単位）
+function evOnsets(ev){                       // 打点（主拍=1 の単位）
   const out=[]; let t=0;
-  ev.forEach(e=>{ if(!e.rest && !e.tie) out.push(t/TICK); t+=e.d; });
+  ev.forEach(e=>{ if(!e.rest && !e.tie) out.push(t/MT.beat); t+=e.d; });
   return out;
 }
 function evTotal(ev){ return ev.reduce((a,e)=>a+e.d, 0); }
@@ -553,8 +592,59 @@ function minGapEv(ev){
   let g = Infinity;
   const on = evOnsets(ev);
   for(let i=1;i<on.length;i++){ const d=on[i]-on[i-1]; if(d>0.001) g=Math.min(g,d); }
-  ev.forEach(e=>{ if(e.d>0) g = Math.min(g, e.d/TICK); });
+  ev.forEach(e=>{ if(e.d>0) g = Math.min(g, e.d/MT.beat); });
   return (!isFinite(g)||g<=0) ? 0.5 : g;
+}
+
+/* 拍子に合わせてイベント列を作る。
+   各拍のまとまり（groups）を、そのまとまりに収まる音価の並びで埋める */
+function genEvents(){
+  const pool = (window.S && S.cells && S.cells.length) ? S.cells : ['q'];
+  const allow = new Set(pool);
+  const ev = [];
+  for(let b=0; b<S.bars; b++){
+    MT.groups.forEach((g, gi)=>{
+      // このまとまりに入れる型を選ぶ
+      const opts = [];
+      if(g % 18 === 0 && g >= 18){                       // 付点4分のまとまり（6/8系）
+        opts.push([18], [12,6], [6,6,6], [6,12], [9,3,6]);
+        if(allow.has('qr')) opts.push([-18], [6,-6,6]);
+      } else if(g === 24){                                // 2分のまとまり（2/2）
+        opts.push([24], [12,12], [12,6,6], [6,6,12]);
+        if(allow.has('qr')) opts.push([-24], [12,-12]);
+      } else if(g === 12){                                // 4分のまとまり
+        opts.push([12]);
+        if(allow.has('ee')) opts.push([6,6]);
+        if(allow.has('ss')) opts.push([3,3,3,3]);
+        if(allow.has('es')) opts.push([6,3,3]);
+        if(allow.has('se')) opts.push([3,3,6]);
+        if(allow.has('dt')) opts.push([9,3]);
+        if(allow.has('qr')) opts.push([-12]);
+        if(allow.has('re')) opts.push([-6,6]);
+      } else if(g === 6){                                 // 8分のまとまり（3/8 など）
+        opts.push([6]);
+        if(allow.has('ss')) opts.push([3,3]);
+        if(allow.has('qr')) opts.push([-6]);
+      } else {                                            // それ以外は素直に埋める
+        opts.push([g]);
+        if(g % 2 === 0) opts.push([g/2, g/2]);
+      }
+      const pick = opts[Math.floor(Math.random()*opts.length)];
+      pick.forEach(d=> ev.push({d:Math.abs(d), rest:d<0, tie:false}));
+    });
+  }
+  // 音が1つも無いのは避ける
+  if(!ev.some(e=>!e.rest)) return genEvents();
+  // シンコペーション: 拍のまとまりの頭の音を、前の音と繋ぐ
+  if(S.syncope){
+    let t=0;
+    for(let i=0;i<ev.length;i++){
+      const atStart = MT.groups.some((_,gi)=> (t % MT.bar) === beatStartOf(gi)) && (t % MT.bar) !== 0;
+      if(atStart && i>0 && !ev[i].rest && !ev[i-1].rest && !ev[i-1].tie && Math.random()<0.4) ev[i].tie = true;
+      t += ev[i].d;
+    }
+  }
+  return mergeTies(ev);
 }
 
 /* セル列 → イベント列（ランダム生成の結果を正本の形へ移す） */
@@ -593,7 +683,7 @@ function writable(d){ return DUR_ORDER.some(k=>DUR[k].d===d); }
    拍節を隠す綴りを避ける: 小節の前半/後半をまたぐ音は分けて書く */
 function startsOn(out, sum){
   const at = out.slice(0,-1).reduce((a,e)=>a+e.d,0);
-  const bar = 48;                                   // 4/4
+  const bar = MT.bar;
   const inBar = at % bar;
   if(sum >= bar) return inBar === 0;
   if(inBar < bar/2 && inBar + sum > bar/2) return sum === bar/2 && inBar === 0;
@@ -857,10 +947,10 @@ function renderTimeline(expected, actual, pairs, missed, extra, span, opt){
    ========================================================================= */
 function renderEvents(ev, opts){
   opts = opts || {};
-  const barTicks = opts.barTicks || 48;             // 4/4（パレットでは音価ぶんだけ）
+  const barTicks = opts.barTicks || MT.bar;         // パレットでは音価ぶんだけ
   const bars = splitBars(ev, barTicks);
   const showMeter = !!opts.meter;
-  const padL = showMeter ? 34 : SC.PADX;
+  const padL = showMeter ? 38 : SC.PADX;
   const perRow = bars.length >= 3 ? 2 : bars.length || 1;
   const rows = Math.ceil(bars.length / perRow);
   const barw = (SC.W - padL - SC.PADX) / perRow;
@@ -876,8 +966,8 @@ function renderEvents(ev, opts){
     const x1 = opts.bare ? padL + 62 : padL + barw*cnt;
     s += `<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="currentColor" stroke-width="1.1" opacity=".55"/>`;
     if(showMeter && r===0){
-      s += `<text x="${padL-20}" y="${y-1}" font-size="12.5" font-weight="700" fill="currentColor" opacity=".9">4</text>`;
-      s += `<text x="${padL-20}" y="${y+12}" font-size="12.5" font-weight="700" fill="currentColor" opacity=".9">4</text>`;
+      s += `<text x="${padL-20}" y="${y-1}" font-size="12.5" font-weight="700" fill="currentColor" opacity=".9" text-anchor="middle">${MT.num}</text>`;
+      s += `<text x="${padL-20}" y="${y+12}" font-size="12.5" font-weight="700" fill="currentColor" opacity=".9" text-anchor="middle">${MT.den}</text>`;
     }
     for(let k=0; k<=cnt; k++){
       const x = padL + barw*k;
@@ -900,18 +990,19 @@ function renderEvents(ev, opts){
     const bx = padL + barw*k;
     const IN = barw*0.055, inner = barw - IN;
 
-    // 拍ごとの重み（音符が多い拍を広く）
-    const w4 = [0,0,0,0];
+    // 拍ごとの重み（音符が多い拍を広く）。拍の数と幅は拍子から決まる
+    const nb = MT.groups.length;
+    const cnts = new Array(nb).fill(0);
     let t = 0;
-    bar.forEach(e=>{ const b = Math.min(3, Math.floor(t/TICK)); if(!e.rest) w4[b]++; t += e.d; });
-    const ws = w4.map(n => 1 + 0.34*Math.max(0, n-1));
-    const wsum = ws.reduce((a,b)=>a+b,0) || 4;
+    bar.forEach(e=>{ if(!e.rest) cnts[beatIndexOf(t)]++; t += e.d; });
+    const ws = cnts.map((n,i) => (MT.groups[i]/MT.beat) * (1 + 0.34*Math.max(0, n-1)));
+    const wsum = ws.reduce((a,b)=>a+b,0) || nb;
     const beatX = [], beatW = [];
     let acc = IN;
-    for(let b=0;b<4;b++){ beatW[b] = inner*ws[b]/wsum; beatX[b] = bx + acc; acc += beatW[b]; }
+    for(let b=0;b<nb;b++){ beatW[b] = inner*ws[b]/wsum; beatX[b] = bx + acc; acc += beatW[b]; }
     const X = tick => {                                   // 小節内ティック → x
-      const b = Math.min(3, Math.floor(tick/TICK));
-      return beatX[b] + ((tick - b*TICK)/TICK)*beatW[b];
+      const b = beatIndexOf(tick);
+      return beatX[b] + ((tick - beatStartOf(b))/MT.groups[b])*beatW[b];
     };
 
     // 連桁グループ: 同じ拍の中で 8分以下の音が続くところ
@@ -921,8 +1012,8 @@ function renderEvents(ev, opts){
     const groups = [];
     let cur = null;
     notes.forEach(n=>{
-      const beamable = !n.e.rest && n.e.d <= 6;
-      const b = Math.floor(n.t/TICK);
+      const beamable = !n.e.rest && flagCount(n.e.d) > 0;
+      const b = beatIndexOf(n.t);
       if(beamable && cur && cur.beat===b) cur.items.push(n);
       else { if(cur && cur.items.length>1) groups.push(cur);
              cur = beamable ? {beat:b, items:[n]} : null; }
@@ -934,19 +1025,19 @@ function renderEvents(ev, opts){
     notes.forEach(n=>{
       const x = X(n.t), e = n.e;
       if(e.rest){
-        s += drawRest(x, y, e.d, opts.bare ? 0 : beatW[Math.min(3,Math.floor(n.t/TICK))]);
+        s += drawRest(x, y, e.d, opts.bare ? 0 : beatW[beatIndexOf(n.t)]);
         if(opts.chant) s += chantText(x, y, 'ウン');
         return;
       }
       s += drawNote(x, y, e.d, !inGroup.has(n.t));
-      if(opts.chant) s += chantText(x, y, e.tie ? 'ー' : syllable(n.t % TICK, e.d));
+      if(opts.chant) s += chantText(x, y, e.tie ? 'ー' : syllable(n.t - beatStartOf(beatIndexOf(n.t)), e.d));
       marks.push({t: globalT + n.t, x, y, row:r, tie:e.tie});
     });
 
     // 連桁
     groups.forEach(g=>{
       const xs = g.items.map(n=> X(n.t) + SC.HEADR - 0.2);
-      const lv = g.items.map(n=> n.e.d<=3 ? 2 : 1);
+      const lv = g.items.map(n=> flagCount(n.e.d));
       for(let level=1; level<=2; level++){
         let i=0;
         while(i<xs.length){
@@ -998,16 +1089,21 @@ function chantText(x, y, t){
 }
 
 /* 音符: 2分以上は白抜き、全音符は符幹なし、付点は右に */
+/* 旗と連桁の本数は「付点を外した基準の音価」で決まる。
+   付点8分(9)は8分に付点なので旗1本。d<=6 で判定すると旗が消え、付点4分に見える。 */
+function baseDur(d){ return (d===36||d===18||d===9||d===4.5) ? d/1.5 : d; }
+function flagCount(d){ const b = baseDur(d); return b<=3 ? 2 : (b<=6 ? 1 : 0); }
 function drawNote(x, y, d, withFlag){
-  const hollow = d >= 24;
-  const dotted = (d===36 || d===18 || d===9);
+  const hollow = baseDur(d) >= 24;
+  const dotted = (d===36 || d===18 || d===9 || d===4.5);
   let out = hollow
     ? `<ellipse cx="${x}" cy="${y}" rx="${SC.HEADR+1.5}" ry="${SC.HEADR-0.4}" fill="none" stroke="currentColor" stroke-width="1.7" transform="rotate(-16 ${x} ${y})"/>`
     : head(x,y);
-  if(d < 48) out += stem(x,y);
-  if(withFlag && d <= 6){
-    out += flag(x,y);
-    if(d <= 3) out += flag2(x,y);
+  if(baseDur(d) < 48) out += stem(x,y);
+  if(withFlag){
+    const n = flagCount(d);
+    if(n >= 1) out += flag(x,y);
+    if(n >= 2) out += flag2(x,y);
   }
   if(dotted) out += `<circle cx="${x+SC.HEADR+4.2}" cy="${y-5.2}" r="1.6" fill="currentColor"/>`;
   return out;
@@ -1041,7 +1137,7 @@ const $ = s => document.querySelector(s);
 const el = {
   score:$('#score'), reps:$('#repsLabel'), big:$('#bigText'), hitote:$('#hitote'),
   streak:$('#streak'), padL:$('#padL'), padBeat:$('#padBeat'),
-  main:$('#btnMain'), detail:$('#btnDetail'),
+  main:$('#btnMain'), again:$('#btnAgain'), detail:$('#btnDetail'),
   beatdots:$('#beatdots'),
   timeline:$('#timeline'), detTable:$('#detTable'), detWarn:$('#detWarn')
 };
@@ -1050,7 +1146,7 @@ const CONDNAME = {all:'全部鳴る', down:'1拍目だけ', half:'途中で消�
 
 const S = {
   bars:1, cells:['q'], cond:'all', bpm:80, goal:1, age:'b', tapSound:true, call:false, fixed:null, saved:[],
-  level:1, cleared:[], ev:null, fixedEv:null, syncope:false, watch:null, demoT0:null, cin2T0:null,
+  level:1, cleared:[], ev:null, fixedEv:null, syncope:false, watch:null, demoT0:null, cin2T0:null, meter:'4/4',
   calib:null,                 // 校正のオフセット(秒)。null=未校正
   phase:'idle',               // idle|countin|play|result|calib
   measures:null, expected:[], reps:1,
@@ -1060,7 +1156,7 @@ const S = {
 /* ---------- 保存 ---------- */
 function save(){
   try{ localStorage.setItem('tantaka', JSON.stringify({
-    bars:S.bars, cond:S.cond, bpm:S.bpm, goal:S.goal, level:S.level, cleared:S.cleared, call:S.call, saved:S.saved,
+    bars:S.bars, cond:S.cond, bpm:S.bpm, goal:S.goal, level:S.level, cleared:S.cleared, call:S.call, saved:S.saved, meter:S.meter,
     age:S.age, tapSound:S.tapSound, calib:S.calib, syncope:S.syncope, history:S.history.slice(-200)
   })); }catch(e){}
 }
@@ -1077,6 +1173,7 @@ function load(){
   S.goal     = oneOf(num(o.goal,1,3,1), [1,3], 1);
   S.level    = num(o.level, 0, 99, 1);
   S.cond     = oneOf(o.cond, ['all','down','half','none'], 'all');
+  S.meter    = (o.meter && METERS[o.meter]) ? o.meter : '4/4';
   S.age      = oneOf(o.age, ['a','b','c'], 'b');
   S.call     = o.call === true;
   S.syncope  = o.syncope === true;
@@ -1085,10 +1182,10 @@ function load(){
   S.cleared  = Array.isArray(o.cleared) ? o.cleared.filter(x=>typeof x==='number') : [];
   S.history  = Array.isArray(o.history) ? o.history.slice(-200) : [];
   S.saved    = (Array.isArray(o.saved) ? o.saved : []).filter(it=>
-      it && [1,2,4].includes(it.bars) && Array.isArray(it.cells)
-      && it.cells.length === it.bars*4 && it.cells.every(isCell)
-    ).map(it=>({bars:it.bars, cells:it.cells.slice(),
-      ties: Array.isArray(it.ties) && it.ties.length===it.cells.length ? it.ties.map(Boolean) : it.cells.map(()=>false)
+      it && [1,2,4].includes(it.bars) && Array.isArray(it.ev) && it.ev.length
+      && it.ev.every(e=> e && typeof e.d==='number' && e.d>0 && e.d<=96)
+    ).map(it=>({bars:it.bars, meter: (it.meter && METERS[it.meter]) ? it.meter : '4/4',
+      ev: it.ev.map(e=>({d:e.d, rest:!!e.rest, tie:!!e.tie}))
     })).slice(0,12);
 }
 
@@ -1113,6 +1210,9 @@ function setStreak(){
 }
 /* 何拍目かは常に出す（本人の指定）。
    クリックを消す条件では、数字を薄くして「これは頼るものではない」と示すだけにする。 */
+function buildBeatDots(){
+  el.beatdots.innerHTML = Array.from({length:MT.count}, (_,i)=>`<i>${i+1}</i>`).join('');
+}
 function updateBeatDots(){
   const soft = !(S.cond==='all' || S.cond==='down');
   [...el.beatdots.children].forEach(x=> x.classList.toggle('dim', soft));
@@ -1151,9 +1251,7 @@ function newQuestion(){
   if(S.fixedEv){
     S.ev = S.fixedEv.map(e=>Object.assign({},e));       // 自作・リンクの問題はそのまま
   } else {
-    const cells = generate(S.bars, S.cells.length?S.cells:['q']);
-    const ties  = makeTies(cells.flat(), S.syncope ? 0.34 : 0, barsPerRowFor(S.bars));
-    S.ev = cellsToEvents(cells.flat(), ties);           // 生成結果もイベント列へ移す
+    S.ev = genEvents();                                  // 拍子に合わせて作る
   }
   S.expected = evOnsets(S.ev);
   S.reps = 1;
@@ -1166,16 +1264,16 @@ function newQuestion(){
   drawScore(); setStreak(); updateBeatDots(); setBeatDot(-1);
   el.big.className = 'big'; el.big.textContent = '準備';
   el.hitote.textContent = '';
-  el.detail.hidden = true;
+  el.detail.hidden = true; el.again.hidden = true;
   el.main.textContent = 'スタート';
   el.padL.classList.remove('dead');
 }
 
 /* ---------- クリックを鳴らす条件 ---------- */
 function metronomeEvents(startT){
-  const total = S.bars*4*S.reps, ev=[];
+  const total = S.bars*MT.count*S.reps, ev=[];
   for(let b=0; b<total; b++){
-    const isDown = (b % 4)===0;
+    const isDown = (b % MT.count)===0;
     const half = b >= total/2;
     let on = false;
     if(S.cond==='all') on = true;
@@ -1197,14 +1295,14 @@ async function start(){
   S.phase = 'countin';
   el.padL.classList.remove('dead');
   el.main.textContent = 'やめる';
-  el.detail.hidden = true;
+  el.detail.hidden = true; el.again.hidden = true;
   el.big.className = 'big count';
   el.hitote.textContent = '';
   el.score.querySelectorAll('.hitmark').forEach(x=>x.remove());
 
   const beat = spb();
-  const barBeats = S.bars*4;
-  const cin = 4;                                    // カウントは1小節ぶん
+  const barBeats = S.bars*MT.count;
+  const cin = MT.count;                             // カウントは1小節ぶん
   S.cinT0 = Audio_.now() + 0.3;
   const ev = [];
   const addCount = t0 => { for(let i=0;i<cin;i++) ev.push({t:t0+i*beat, type:i===0?'down':'beat'}); };
@@ -1258,7 +1356,7 @@ function startLoop(){
         el.hitote.textContent='';
       } else if(S.cin2T0 !== null && S.cin2T0 !== undefined && t >= S.cin2T0){
         const n = Math.max(0, Math.floor((t - S.cin2T0)/beat));
-        const v = String(Math.max(1, 4-n));
+        const v = String(Math.max(1, MT.count-n));
         if(el.big.textContent !== v){ el.big.className='big count'; el.big.textContent = v; }
         el.hitote.textContent = '次 あなた';
         setBeatDot(-1);
@@ -1268,16 +1366,16 @@ function startLoop(){
           el.hitote.textContent = '譜面の下の読みを声に出して';
         }
         const b = Math.floor((t - S.demoT0)/beat);
-        setBeatDot(b>=0 ? (b % 4) : -1);
+        setBeatDot(b>=0 ? (b % MT.count) : -1);
       } else {
         const n = Math.max(0, Math.floor((t - S.cinT0)/beat));
-        const v = String(Math.max(1, 4-n));
+        const v = String(Math.max(1, MT.count-n));
         if(el.big.textContent !== v){ el.big.className='big count'; el.big.textContent = v; }
         if(!el.hitote.textContent) el.hitote.textContent = S.call ? '次 お手本' : '次 あなた';
       }
     } else if(S.phase==='play'){
       const b = Math.floor((t - S.t0)/beat);
-      setBeatDot(b>=0 ? (b % 4) : -1);
+      setBeatDot(b>=0 ? (b % MT.count) : -1);
       if(t >= S.endT){ finish(); return; }
     }
     S.raf = requestAnimationFrame(step);
@@ -1320,7 +1418,7 @@ function markHit(t){
   if(!S.beatX || !S.beatX.length) return;
   const beat = spb();
   const pos = (t - S.t0)/beat;                    // 拍単位
-  const inBar = pos % (S.bars*4);
+  const inBar = pos % (S.bars*MT.count);
   let best=null, bd=1e9;
   S.beatX.forEach(m=>{ const d=Math.abs(m.beat - Math.round(inBar*2)/2); if(d<bd){bd=d; best=m;} });
   if(!best || bd>0.75) return;
@@ -1409,11 +1507,12 @@ function finish(){
   } else if(res.missed.length){
     // 通し番号で言われても譜面のどこか分からない。何回目の何拍目かで言う
     const b = S.expected[res.missed[0]];
-    const barBeats = S.bars*4;
-    const nth = Math.floor(b % 4) + 1;
-    const bar = Math.floor(b / 4) + 1;
-    const ura = (b % 1) >= 0.25;
-    word = (S.bars>1 ? `${bar}小節目の ` : '') + `${nth}拍目${ura?'の裏':''}の音が抜けた`;
+    const barBeats = S.bars*MT.count;
+    const nth = Math.floor(b % MT.count) + 1;
+    const bar = Math.floor(b / MT.count) + 1;
+    const fr = b % 1;
+    const pos = fr < 0.125 ? '' : (fr < 0.375 ? 'の2つ目' : (fr < 0.625 ? 'の裏' : 'の4つ目'));
+    word = (S.bars>1 ? `${bar}小節目の ` : '') + `${nth}拍目${pos}の音が抜けた`;
   } else if(res.extra.length){
     word = `余分に ${res.extra.length}回叩いた`;
   } else if(sl!==null && Math.abs(sl) > 0.012 && Math.abs(sl)*xs[xs.length-1] > W*0.8){
@@ -1435,10 +1534,11 @@ function finish(){
     let worst=0, wi=0;
     diffs.forEach((v,k)=>{ const e=Math.abs(v-usePhase); if(e>worst){worst=e; wi=k;} });
     const bp = S.expected[res.pairs[wi][0]];
-    const nth = Math.floor(bp % 4)+1;
-    const bar = Math.floor(bp / 4)+1;
-    const ura = (bp % 1) >= 0.25;
-    word = (S.bars>1 ? `${bar}小節目の ` : '') + `${nth}拍目${ura?'の裏':''}が ${diffs[wi]-usePhase>0?'遅かった':'早かった'}`;
+    const nth = Math.floor(bp % MT.count)+1;
+    const bar = Math.floor(bp / MT.count)+1;
+    const fr2 = bp % 1;
+    const pos2 = fr2 < 0.125 ? '' : (fr2 < 0.375 ? 'の2つ目' : (fr2 < 0.625 ? 'の裏' : 'の4つ目'));
+    word = (S.bars>1 ? `${bar}小節目の ` : '') + `${nth}拍目${pos2}が ${diffs[wi]-usePhase>0?'遅かった':'早かった'}`;
   } else if(spread > W*0.55){
     word = '揃ってきた。少しばらつきがある';
   } else {
@@ -1516,15 +1616,15 @@ const PAL_N = ['w','h','qd','q','ed','e','s'];
 const PAL_R = ['h','q','e','s'];
 const M = {ev:[], bars:1};
 
-function mkCap(){ return M.bars*48; }
+function mkCap(){ return M.bars*MT.bar; }
 function mkDraw(){
-  const g = renderEvents(M.ev.length?M.ev:[{d:48, rest:true}], {meter:true, chant:true});
+  const g = renderEvents(M.ev.length?M.ev:[{d:MT.bar, rest:true}], {meter:true, chant:true});
   const sc = $('#mkScore');
   sc.setAttribute('viewBox', g.viewBox); sc.innerHTML = g.svg; sc.style.color='var(--note)';
   const used = evTotal(M.ev), cap = mkCap();
   const left = cap - used;
   $('#mkHint').textContent = left > 0
-    ? `残り ${(left/12).toFixed(left%12?2:0)} 拍`
+    ? `残り ${(left/MT.beat).toFixed(left%MT.beat?2:0)} 拍`
     : (left === 0 ? 'ちょうど埋まった' : 'いっぱいです');
   const last = M.ev[M.ev.length-1];
   const prev = M.ev[M.ev.length-2];
@@ -1580,16 +1680,17 @@ function evParse(str){
   return out.length ? out : null;
 }
 function makeLink(){
-  const code = 'v3.' + M.bars + '.' + evCode(M.ev);
+  const code = 'v4.' + encodeURIComponent(S.meter) + '.' + M.bars + '.' + evCode(M.ev);
   return location.origin + location.pathname + '#' + encodeURIComponent(code);
 }
 function readLink(){
   const h = decodeURIComponent(location.hash.replace(/^#/,''));
-  const m = h.match(/^v3\.(\d)\.(.+)$/);
-  if(!m) return null;
-  const bars = Number(m[1]); const ev = evParse(m[2]);
-  if(!ev || ![1,2,4].includes(bars) || evTotal(ev) > bars*48) return null;
-  return {bars, ev};
+  let m = h.match(/^v4\.([0-9]+\/[0-9]+)\.(\d)\.(.+)$/);
+  let meter = '4/4', bars, ev;
+  if(m){ meter = METERS[m[1]] ? m[1] : '4/4'; bars = Number(m[2]); ev = evParse(m[3]); }
+  else { m = h.match(/^v3\.(\d)\.(.+)$/); if(!m) return null; bars = Number(m[1]); ev = evParse(m[2]); }
+  if(!ev || ![1,2,4].includes(bars) || evTotal(ev) > bars*METERS[meter].bar) return null;
+  return {bars, ev, meter};
 }
 
 /* --- ホームのレベル一覧 --- */
@@ -1620,6 +1721,7 @@ function buildLevels(){
     if(b.dataset.make){ enterMake(); return; }
     if(b.dataset.mine !== undefined){
       const it = S.saved[Number(b.dataset.mine)];
+      if(it.meter){ S.meter = it.meter; setMeter(it.meter); syncMeterUI(); }
       S.bars = it.bars; enterPlayEv(it.ev, it.bars); return;
     }
     enterPlay(Number(b.dataset.lv));
@@ -1636,6 +1738,22 @@ function buildBpms(){
     save();
     if(S.phase==='idle' && document.body.classList.contains('playing')) newQuestion();
   });
+}
+
+/* --- 拍子 --- */
+function syncMeterUI(){
+  const el2 = $('#meterLabel');
+  if(el2) el2.innerHTML = `${MT.num}<span>/${MT.den}</span>`;
+  [...($('#segMeter')||{children:[]}).children].forEach(x=> x.setAttribute('aria-pressed', String(x.dataset.v===S.meter)));
+  const n = $('#meterNote');
+  if(n) n.innerHTML = `<b>${S.meter}</b> は1小節に <b>${MT.count}拍</b>。1拍は <b>${MT.sub}音符</b>。`
+    + (MT.den===8 && MT.beat===18 ? '<br>8分音符3つでひとまとまり。数えるのは大きい2拍（または3拍）のほう。' : '')
+    + `<br>BPMは<b>この1拍</b>の速さ。`;
+  if($('#btnCall')) $('#btnCall').setAttribute('aria-pressed', String(S.call));
+}
+function buildMeterSeg(){
+  $('#segMeter').innerHTML = METER_ORDER.map(m=>
+    `<button data-v="${m}" aria-pressed="${m===S.meter}" style="min-width:70px">${m}<span style="display:block;font-size:10px;color:var(--ink3)">${METERS[m].count}拍</span></button>`).join('');
 }
 
 /* --- 画面の出入り --- */
@@ -1686,7 +1804,7 @@ async function playModel(){
   Audio_.schedule(ev);
   el.big.className='big'; el.big.textContent='聴いて';
   el.hitote.textContent = '譜面の下の読みを声に出して';
-  const endT = s0 + (S.bars*4)*beat + 0.4;
+  const endT = s0 + (S.bars*MT.count)*beat + 0.4;
   const back = ()=>{
     if(S.phase!=='idle' && S.phase!=='result') return;
     if(Audio_.now() >= endT){
@@ -1709,7 +1827,7 @@ async function startCalib(){
   el.hitote.textContent='クリックに合わせて20回叩く';
   el.main.textContent='やめる';
   const beat=0.6; calT0 = Audio_.now()+0.6;
-  const ev=[]; for(let i=0;i<26;i++) ev.push({t:calT0+i*beat, type:i%4===0?'down':'beat'});
+  const ev=[]; for(let i=0;i<26;i++) ev.push({t:calT0+i*beat, type:i%4===0?'down':'beat'});  // 校正は拍子に関係なく4つ割り
   Audio_.schedule(ev);
   const endT = calT0 + 26*beat;
   const w=()=>{ if(S.phase!=='calib') return;
@@ -1786,6 +1904,7 @@ function boot(){
   load();
   if(S.calib===undefined) S.calib=null;
   if(!S.cleared) S.cleared=[];
+  setMeter(S.meter); buildMeterSeg(); buildBeatDots(); syncMeterUI();
   buildBpms(); buildLevels();
   syncSeg('#barsRow','bars'); syncSeg('#segCond','cond');
   syncSeg('#segGoal','goal'); syncSeg('#segAge','age');
@@ -1824,6 +1943,18 @@ function boot(){
     save();
   });
 
+  $('#meterLabel').addEventListener('click', ()=> openSheet($('#sheetMeter')));
+  $('#closeMeter').addEventListener('click', ()=> closeSheet($('#sheetMeter')));
+  $('#sheetMeter').addEventListener('click', e=>{ if(e.target===$('#sheetMeter')) closeSheet($('#sheetMeter')); });
+  $('#segMeter').addEventListener('click', e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    S.meter = b.dataset.v; setMeter(S.meter);
+    buildBeatDots(); syncMeterUI(); save();
+    M.ev = [];                                   // 拍子が変われば作りかけは捨てる
+    if(document.body.classList.contains('making')) mkDraw();
+    else if(document.body.classList.contains('playing') && S.phase==='idle' && !S.fixedEv) newQuestion();
+    else buildLevels();
+  });
   $('#btnSet').addEventListener('click', ()=> openSheet($('#sheetSet')));
   $('#closeSet').addEventListener('click', ()=> closeSheet($('#sheetSet')));
   $('#closeDet').addEventListener('click', ()=> closeSheet($('#sheetDet')));
@@ -1845,9 +1976,9 @@ function boot(){
   $('#mkPlay').addEventListener('click', ()=>{
     if(!M.ev.some(e=>!e.rest)) return;
     S.saved = S.saved || [];
-    const code = M.bars + '.' + evCode(M.ev);
-    if(!S.saved.some(x=> x.bars+'.'+evCode(x.ev)===code)){
-      S.saved.unshift({bars:M.bars, ev:M.ev.map(e=>Object.assign({},e))});
+    const code = S.meter + '.' + M.bars + '.' + evCode(M.ev);
+    if(!S.saved.some(x=> (x.meter||'4/4')+'.'+x.bars+'.'+evCode(x.ev)===code)){
+      S.saved.unshift({bars:M.bars, meter:S.meter, ev:M.ev.map(e=>Object.assign({},e))});
       S.saved = S.saved.slice(0,12); save();
     }
     enterPlayEv(M.ev, M.bars);
@@ -1866,6 +1997,13 @@ function boot(){
     save();
   });
   el.detail.addEventListener('click', ()=> openSheet($('#sheetDet')));
+  el.again.addEventListener('click', async ()=>{
+    // 同じ問題をもう一度。譜面は変えない
+    S.phase='idle'; S.taps=[];
+    el.detail.hidden = true; el.again.hidden = true;
+    el.hitote.textContent='';
+    await start();
+  });
 
   el.main.addEventListener('click', async ()=>{
     if(S.phase==='idle') await start();
@@ -1895,7 +2033,7 @@ function boot(){
   updateCalNote();
 
   const fromLink = readLink();
-  if(fromLink){ S.bars = fromLink.bars; enterPlayEv(fromLink.ev, fromLink.bars); }
+  if(fromLink){ S.meter = fromLink.meter || '4/4'; setMeter(S.meter); syncMeterUI(); S.bars = fromLink.bars; enterPlayEv(fromLink.ev, fromLink.bars); }
 }
 init();
 </script>
