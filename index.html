@@ -607,14 +607,22 @@ function genEvents(){
     MT.groups.forEach((g, gi)=>{
       // このまとまりに入れる型を選ぶ
       const opts = [];
-      if(g % 18 === 0 && g >= 18){                       // 付点4分のまとまり（6/8系）
-        opts.push([18], [12,6], [6,6,6], [6,12], [9,3,6]);
-        if(allow.has('qr')) opts.push([-18], [6,-6,6]);
+      if(g === 18){                                       // 付点4分のまとまり（6/8系）
+        if(allow.has('c3'))  opts.push([6,6,6]);          // タ タ タ
+        if(allow.has('cd'))  opts.push([18]);             // ターン（1つで1拍分）
+        if(allow.has('cq'))  opts.push([12,6]);           // ター タ
+        if(allow.has('cqe')) opts.push([6,12]);           // タ ター
+        if(allow.has('cs')){
+          if(allow.size===1) opts.push([3,3,3,3,3,3]);     // 16分だけのレベル
+          else opts.push([3,3,6,6],[6,3,3,6],[6,6,3,3]);
+        }
+        if(allow.has('cr'))  opts.push([-18],[6,-6,6],[-6,6,6],[6,6,-6]);
+        if(!opts.length) opts.push([6,6,6]);
       } else if(g === 24){                                // 2分のまとまり（2/2）
         opts.push([24], [12,12], [12,6,6], [6,6,12]);
         if(allow.has('qr')) opts.push([-24], [12,-12]);
       } else if(g === 12){                                // 4分のまとまり
-        opts.push([12]);
+        if(allow.has('q'))  opts.push([12]);
         if(allow.has('ee')) opts.push([6,6]);
         if(allow.has('ss')) opts.push([3,3,3,3]);
         if(allow.has('es')) opts.push([6,3,3]);
@@ -622,6 +630,7 @@ function genEvents(){
         if(allow.has('dt')) opts.push([9,3]);
         if(allow.has('qr')) opts.push([-12]);
         if(allow.has('re')) opts.push([-6,6]);
+        if(!opts.length) opts.push([12]);
       } else if(g === 6){                                 // 8分のまとまり（3/8 など）
         opts.push([6]);
         if(allow.has('ss')) opts.push([3,3]);
@@ -1619,17 +1628,31 @@ function finish(){
 /* ================= レベルと配線 ================= */
 /* 音価の導入順に並べる。16分と付点は、うら入り・シンコペーションより前に来る
    （うら拍入りと切分を先に置くのは、どの指導体系の順序とも合わない） */
-const LEVELS = [
-  {n:1, cells:['q'],                          d:'4分音符だけ'},
-  {n:2, cells:['q','qr'],                     d:'4分音符と休符'},
-  {n:3, cells:['q','ee'],                     d:'8分音符2つ'},
-  {n:4, cells:['q','ee','qr'],                d:'8分音符と休符'},
-  {n:5, cells:['q','ee','ss'],                d:'16分音符4つ'},
-  {n:6, cells:['q','ee','ss','es','se'],      d:'8分と16分の混ざり'},
-  {n:7, cells:['q','ee','dt'],                d:'タッカ（付点8分＋16分）'},
-  {n:8, cells:['q','ee','qr','re'],           d:'裏から入る'},
-  {n:9, cells:['q','ee','ss','dt','qr','re'], d:'全部'}
+const LEVELS_SIMPLE = [
+  {n:1, cells:['q'],                          d:'4分音符だけ',          demo:[12,12,12,12]},
+  {n:2, cells:['q','qr'],                     d:'4分音符と、休符',      demo:[12,-12,12,12]},
+  {n:3, cells:['ee'],                         d:'8分音符だけ',          demo:[6,6,6,6,6,6]},
+  {n:4, cells:['q','ee'],                     d:'4分と8分',            demo:[12,6,6,12]},
+  {n:5, cells:['q','ee','qr'],                d:'4分・8分と、休符',     demo:[6,6,-12,12]},
+  {n:6, cells:['ss'],                         d:'16分音符だけ',         demo:[3,3,3,3,3,3,3,3]},
+  {n:7, cells:['q','ee','ss','es','se'],      d:'8分と16分の混ざり',    demo:[6,3,3,3,3,6]},
+  {n:8, cells:['q','ee','dt'],                d:'タッカ（付点8分＋16分）', demo:[9,3,9,3]},
+  {n:9, cells:['q','ee','qr','re'],           d:'裏から入る',           demo:[-6,6,12,-6,6]},
+  {n:10,cells:['q','ee','ss','dt','qr','re'], d:'全部',                demo:[9,3,6,6,3,3,3,3]}
 ];
+/* 6/8・9/8・12/8 用。1拍は8分音符で、8分3つがひとまとまり */
+const LEVELS_COMPOUND = [
+  {n:1, cells:['c3'],                            d:'8分音符だけ（タ タ タ）',  demo:[6,6,6,6,6,6]},
+  {n:2, cells:['c3','cd'],                       d:'＋ 3つ分をのばす',        demo:[18,6,6,6]},
+  {n:3, cells:['c3','cd','cq'],                  d:'＋ ター タ',             demo:[12,6,6,6,6]},
+  {n:4, cells:['c3','cd','cq','cqe'],            d:'＋ タ ター',             demo:[6,12,18]},
+  {n:5, cells:['cs'],                            d:'16分音符だけ',           demo:[3,3,3,3,3,3]},
+  {n:6, cells:['c3','cd','cq','cqe','cr'],       d:'＋ 休符',                demo:[6,-6,6,18]},
+  {n:7, cells:['c3','cd','cq','cqe','cr','cs'],  d:'全部',                   demo:[6,3,3,6,18]}
+];
+function isCompound(){ return MT.groups.some(g=> g===18); }
+function levelSet(){ return isCompound() ? LEVELS_COMPOUND : LEVELS_SIMPLE; }
+
 const BPMS = [60, 80, 100, 120, 140];
 
 
@@ -1730,10 +1753,9 @@ function buildLevels(){
   const makeCard = `<button class="lv" data-make="1" style="background:var(--accent-soft)">
       <div class="h"><div class="n">＋ 自分で作る</div><div class="d">曲の中の難しいリズムを入れる</div></div>
     </button>`;
-  box.innerHTML = makeCard + mine + LEVELS.map(L=>{
-    let demo = L.cells.slice(0,4);                 // 使うセルを1拍ずつ並べた見本
-    if(demo.length===1) demo = [demo[0], demo[0]];
-    const g = renderScore([demo], {cols:demo.length});
+  box.innerHTML = makeCard + mine + levelSet().map(L=>{
+    const dev = (L.demo||[12]).map(d=>({d:Math.abs(d), rest:d<0, tie:false}));
+    const g = renderEvents(dev, {bare:true, barTicks: dev.reduce((a,e)=>a+e.d,0)});
     const done = (S.cleared||[]).includes(L.n) ? '<div class="done">できた</div>' : '';
     return `<button class="lv" data-lv="${L.n}">
       <div class="h"><div class="n">レベル ${L.n}</div><div class="d">${L.d}</div>${done}</div>
@@ -1784,7 +1806,8 @@ function buildMeterSeg(){
 function enterPlay(lv){
   S.fixedEv = null;
   S.level = lv;
-  S.cells = LEVELS.find(L=>L.n===lv).cells;
+  const set = levelSet();
+  S.cells = (set.find(L=>L.n===lv) || set[0]).cells;
   S.results = [];
   document.body.classList.add('playing');
   $('#btnBack').hidden = false;
