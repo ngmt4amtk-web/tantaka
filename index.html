@@ -1557,7 +1557,8 @@ function finish(){
   S.phase='result';
   Audio_.clear();
   el.padL.classList.add('dead');
-  el.main.textContent='次の問題';
+  el.main.textContent='次の問題';   // ランダムに新しい問題
+  el.again.hidden = false;          // 同じ問題をもう一度
   setBeatDot(-1);
 
   const beat = spb();
