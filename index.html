@@ -49,13 +49,13 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 /* ===== ホーム: レベル一覧 ===== */
 .levels{flex:1 1 auto; overflow-y:auto; padding:10px 12px calc(env(safe-area-inset-bottom) + 20px);
   -webkit-overflow-scrolling:touch}
-.lv{width:100%; background:var(--card2); border-radius:14px; padding:12px 14px; margin-bottom:9px; text-align:left; display:block}
+.lv{width:100%; background:var(--card2); border-radius:14px; padding:11px 14px 9px; margin-bottom:8px; text-align:left; display:block}
 .lv:active{background:#ddd9e2}
 .lv .h{display:flex; align-items:baseline; gap:8px}
 .lv .n{font-size:13.5px; font-weight:700; color:var(--accent)}
 .lv .d{font-size:11.5px; color:var(--ink2)}
-.lv .ex{margin-top:4px}
-.lv svg{display:block; width:100%; height:auto; max-width:230px; margin:0 auto}
+.lv .ex{margin-top:2px; overflow:hidden}
+.lv svg{display:block; height:44px; width:auto; max-width:100%; margin:2px 0 0}
 .lv .done{margin-left:auto; font-size:11px; color:var(--good); font-weight:600}
 
 /* ===== プレイ画面 ===== */
@@ -1151,6 +1151,43 @@ function srest(x,y){
 
 <script>
 'use strict';
+/* レベルカード用。譜線も小節線も引かず、そのレベルで出てくる音符だけを並べる。
+   groups の中は連桁で繋ぐ。負の数は休符。 */
+function glyphRow(groups){
+  const y = 30, GAP = 15;
+  let x = 6, out = '';
+  groups.forEach(grp=>{
+    const n = grp.length;
+    const step = (n<=1) ? 0 : (grp.every(d=>Math.abs(d)<=3) ? 13 : 17);
+    const xs = grp.map((_,i)=> x + 8 + i*step);
+    grp.forEach((d,i)=>{
+      if(d < 0) out += drawRest(xs[i], y, -d, 0);
+      else out += drawNote(xs[i], y, d, n===1 || flagCount(d)===0);
+    });
+    const notes = grp.filter(d=>d>0);
+    if(n > 1 && notes.length === n && grp.every(d=> flagCount(d) > 0)){
+      const lv = grp.map(flagCount);
+      for(let k=1; k<=2; k++){
+        let i=0;
+        while(i<n){
+          if(lv[i]<k){ i++; continue; }
+          let j=i; while(j+1<n && lv[j+1]>=k) j++;
+          const by = y - SC.STEM + (k-1)*6.0;
+          const a = xs[i]+SC.HEADR-0.2, b = xs[j]+SC.HEADR-0.2;
+          if(j>i) out += `<line x1="${a}" y1="${by}" x2="${b}" y2="${by}" stroke="currentColor" stroke-width="3.9" stroke-linecap="butt"/>`;
+          else if(k===2) out += `<line x1="${a}" y1="${by}" x2="${a-6.2}" y2="${by}" stroke="currentColor" stroke-width="3.9" stroke-linecap="butt"/>`;
+          i=j+1;
+        }
+      }
+    }
+    x = xs[xs.length-1] + 12 + GAP;
+  });
+  return {svg:out, viewBox:`0 0 ${Math.max(x,60)} 52`};
+}
+</script>
+
+<script>
+'use strict';
 /* ================= アプリ本体 ================= */
 const $ = s => document.querySelector(s);
 const el = {
@@ -1683,26 +1720,26 @@ function finish(){
 /* 音価の導入順に並べる。16分と付点は、うら入り・シンコペーションより前に来る
    （うら拍入りと切分を先に置くのは、どの指導体系の順序とも合わない） */
 const LEVELS_SIMPLE = [
-  {n:1, cells:['q'],                          d:'4分音符だけ',          demo:[12,12,12,12]},
-  {n:2, cells:['q','qr'],                     d:'4分音符と、休符',      demo:[12,-12,12,12]},
-  {n:3, cells:['ee'],                         d:'8分音符だけ',          demo:[6,6,6,6,6,6]},
-  {n:4, cells:['q','ee'],                     d:'4分と8分',            demo:[12,6,6,12]},
-  {n:5, cells:['q','ee','qr'],                d:'4分・8分と、休符',     demo:[6,6,-12,12]},
-  {n:6, cells:['ss'],                         d:'16分音符だけ',         demo:[3,3,3,3,3,3,3,3]},
-  {n:7, cells:['q','ee','ss','es','se'],      d:'8分と16分の混ざり',    demo:[6,3,3,3,3,6]},
-  {n:8, cells:['q','ee','dt'],                d:'タッカ（付点8分＋16分）', demo:[9,3,9,3]},
-  {n:9, cells:['q','ee','qr','re'],           d:'裏から入る',           demo:[-6,6,12,-6,6]},
-  {n:10,cells:['q','ee','ss','dt','qr','re'], d:'全部',                demo:[9,3,6,6,3,3,3,3]}
+  {n:1, cells:['q'],                          d:'4分音符だけ',            demo:[[12]]},
+  {n:2, cells:['q','qr'],                     d:'4分音符と、休符',        demo:[[12],[-12]]},
+  {n:3, cells:['ee'],                         d:'8分音符だけ',            demo:[[6,6]]},
+  {n:4, cells:['q','ee'],                     d:'4分と8分',              demo:[[12],[6,6]]},
+  {n:5, cells:['q','ee','qr'],                d:'4分・8分と、休符',       demo:[[12],[6,6],[-12]]},
+  {n:6, cells:['ss'],                         d:'16分音符だけ',           demo:[[3,3,3,3]]},
+  {n:7, cells:['q','ee','ss','es','se'],      d:'8分と16分の混ざり',      demo:[[6,6],[3,3,3,3],[6,3,3]]},
+  {n:8, cells:['q','ee','dt'],                d:'タッカ（付点8分＋16分）', demo:[[12],[6,6],[9,3]]},
+  {n:9, cells:['q','ee','qr','re'],           d:'裏から入る',             demo:[[12],[6,6],[-6,6]]},
+  {n:10,cells:['q','ee','ss','dt','qr','re'], d:'全部',                  demo:[[12],[6,6],[3,3,3,3],[9,3],[-12]]}
 ];
 /* 6/8・9/8・12/8 用。1拍は8分音符で、8分3つがひとまとまり */
 const LEVELS_COMPOUND = [
-  {n:1, cells:['c3'],                            d:'8分音符だけ（タ タ タ）',  demo:[6,6,6,6,6,6]},
-  {n:2, cells:['c3','cd'],                       d:'＋ 3つ分をのばす',        demo:[18,6,6,6]},
-  {n:3, cells:['c3','cd','cq'],                  d:'＋ ター タ',             demo:[12,6,6,6,6]},
-  {n:4, cells:['c3','cd','cq','cqe'],            d:'＋ タ ター',             demo:[6,12,18]},
-  {n:5, cells:['cs'],                            d:'16分音符だけ',           demo:[3,3,3,3,3,3]},
-  {n:6, cells:['c3','cd','cq','cqe','cr'],       d:'＋ 休符',                demo:[6,-6,6,18]},
-  {n:7, cells:['c3','cd','cq','cqe','cr','cs'],  d:'全部',                   demo:[6,3,3,6,18]}
+  {n:1, cells:['c3'],                            d:'8分音符だけ',      demo:[[6,6,6]]},
+  {n:2, cells:['c3','cd'],                       d:'＋ 3つ分をのばす', demo:[[6,6,6],[18]]},
+  {n:3, cells:['c3','cd','cq'],                  d:'＋ ター タ',       demo:[[6,6,6],[12,6]]},
+  {n:4, cells:['c3','cd','cq','cqe'],            d:'＋ タ ター',       demo:[[6,6,6],[6,12]]},
+  {n:5, cells:['cs'],                            d:'16分音符だけ',     demo:[[3,3,3,3,3,3]]},
+  {n:6, cells:['c3','cd','cq','cqe','cr'],       d:'＋ 休符',          demo:[[6,6,6],[18],[-18]]},
+  {n:7, cells:['c3','cd','cq','cqe','cr','cs'],  d:'全部',            demo:[[6,6,6],[18],[3,3,6],[-18]]}
 ];
 function isCompound(){ return MT.groups.some(g=> g===18); }
 function levelSet(){ return isCompound() ? LEVELS_COMPOUND : LEVELS_SIMPLE; }
@@ -1801,8 +1838,7 @@ function buildLevels(){
       <div class="h"><div class="n">＋ 自分で作る</div><div class="d">曲の中の難しいリズムを入れる</div></div>
     </button>`;
   box.innerHTML = makeCard + levelSet().map(L=>{
-    const dev = (L.demo||[12]).map(d=>({d:Math.abs(d), rest:d<0, tie:false}));
-    const g = renderEvents(dev, {bare:true, barTicks: dev.reduce((a,e)=>a+e.d,0)});
+    const g = glyphRow(L.demo || [[12]]);
     const done = (S.cleared||[]).includes(L.n) ? '<div class="done">できた</div>' : '';
     return `<button class="lv" data-lv="${L.n}">
       <div class="h"><div class="n">レベル ${L.n}</div><div class="d">${L.d}</div>${done}</div>
