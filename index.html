@@ -1,0 +1,1903 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#f2f0f4">
+<title>タンタカ — リズム練習</title>
+<style>
+:root{
+  --bg:#f2f0f4; --card:#ffffff; --card2:#e8e5ec; --bar:#faf9fb;
+  --ink:#1b1a1f; --ink2:#6b6773; --ink3:#9a96a3;
+  --line:rgb(27 26 31 / 10%);
+  --accent:#9c1442; --accent-soft:rgb(156 20 66 / 10%);
+  --good:#1f7a52; --warn:#b45309; --bad:#b3243f;
+  --note:#1b1a1f;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html,body{height:100%; margin:0; overscroll-behavior:none}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;
+  font-feature-settings:"palt"; -webkit-text-size-adjust:100%;
+  display:flex; flex-direction:column; height:100dvh; min-height:100svh; overflow:hidden;
+  user-select:none; -webkit-user-select:none;
+}
+button{font:inherit; color:inherit; background:none; border:none; cursor:pointer; padding:0}
+
+/* ===== 共通の上部バー ===== */
+.topbar{flex:0 0 auto; background:var(--bar); border-bottom:1px solid var(--line);
+  padding:calc(env(safe-area-inset-top) + 8px) 12px 10px}
+.tb1{display:flex; align-items:center; justify-content:center; position:relative; min-height:36px}
+.meter{font-size:19px; font-weight:700; color:var(--accent); letter-spacing:.02em}
+.meter span{font-size:12px; margin-left:3px; color:var(--accent); opacity:.75}
+.gear{position:absolute; right:0; top:50%; transform:translateY(-50%);
+  width:38px; height:38px; border-radius:50%; background:var(--card2); display:grid; place-items:center; font-size:16px; color:var(--ink2)}
+.back{position:absolute; left:0; top:50%; transform:translateY(-50%);
+  width:38px; height:38px; display:grid; place-items:center; font-size:22px; color:var(--accent)}
+.tb2{margin-top:6px}
+.tb2 .lab{text-align:center; font-size:10.5px; letter-spacing:.14em; color:var(--accent); opacity:.8; margin-bottom:4px}
+.bpms{display:flex; justify-content:space-between; align-items:center; padding:0 4px}
+.bpms button{width:44px; height:44px; border-radius:50%; font-size:15px; color:var(--accent); font-weight:600}
+.bpms button[aria-pressed="true"]{background:var(--accent); color:#fff}
+.tb3{display:flex; gap:6px; margin-top:8px; justify-content:center}
+.tb3 button{flex:1; max-width:110px; min-height:34px; border-radius:9px; border:1px solid var(--line);
+  background:var(--card); font-size:12.5px; color:var(--ink2)}
+.tb3 button[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600}
+
+/* ===== ホーム: レベル一覧 ===== */
+.levels{flex:1 1 auto; overflow-y:auto; padding:10px 12px calc(env(safe-area-inset-bottom) + 20px);
+  -webkit-overflow-scrolling:touch}
+.lv{width:100%; background:var(--card2); border-radius:14px; padding:12px 14px; margin-bottom:9px; text-align:left; display:block}
+.lv:active{background:#ddd9e2}
+.lv .h{display:flex; align-items:baseline; gap:8px}
+.lv .n{font-size:13.5px; font-weight:700; color:var(--accent)}
+.lv .d{font-size:11.5px; color:var(--ink2)}
+.lv .ex{margin-top:4px}
+.lv svg{display:block; width:100%; height:auto; max-width:230px; margin:0 auto}
+.lv .done{margin-left:auto; font-size:11px; color:var(--good); font-weight:600}
+
+/* ===== プレイ画面 ===== */
+.play{flex:1 1 auto; display:none; flex-direction:column; min-height:0}
+body.playing .levels{display:none}
+body.playing .play{display:flex}
+.beatdots{flex:0 0 auto; display:flex; justify-content:center; gap:14px; padding:9px 0 3px; min-height:42px}
+.beatdots i{width:30px; height:30px; border-radius:50%; display:grid; place-items:center;
+  font-size:14px; font-style:normal; color:var(--accent); font-weight:600}
+.beatdots i.on{background:var(--accent); color:#fff}
+.beatdots i.dim{opacity:.28}
+.scorewrap{flex:0 0 auto; padding:4px 12px 0}
+.score{display:block; width:100%; height:auto}
+.reps{text-align:center; font-size:11.5px; color:var(--ink3); margin-top:2px}
+.center{flex:1 1 auto; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:6px 16px; min-height:0}
+.big{font-size:26px; font-weight:700; text-align:center; line-height:1.25}
+.big.count{font-size:56px; color:var(--accent); font-variant-numeric:tabular-nums}
+.big.ok{color:var(--good)} .big.ng{color:var(--warn)}
+.hitote{margin-top:7px; font-size:15px; color:var(--ink2); text-align:center; line-height:1.6; max-width:21em}
+.streak{margin-top:9px; display:flex; gap:6px}
+.streak i{width:9px; height:9px; border-radius:50%; background:var(--card2); border:1px solid var(--line)}
+.streak i.on{background:var(--good); border-color:var(--good)}
+.pads{flex:0 0 auto; display:flex; padding:0 12px 8px; height:24dvh; min-height:136px}
+.pad{flex:1; border-radius:16px; background:var(--accent); display:grid; place-items:center;
+  color:rgb(255 255 255 / 92%); font-size:30px; position:relative; overflow:hidden; touch-action:none}
+#padBeat{font-size:58px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1; pointer-events:none}
+#padBeat.idle{font-size:30px; font-weight:400; opacity:.5}
+.pad:active{background:#86103a}
+.pad.dead{background:var(--card2); color:var(--ink3)}
+.ripple{position:absolute; border-radius:50%; background:rgb(255 255 255 / 34%); pointer-events:none;
+  transform:translate(-50%,-50%); animation:rip .45s ease-out forwards}
+@keyframes rip{from{width:12px;height:12px;opacity:.9} to{width:210px;height:210px;opacity:0}}
+.playacts{flex:0 0 auto; display:flex; gap:8px; padding:0 12px calc(env(safe-area-inset-bottom) + 12px)}
+.pbtn{flex:1; min-height:50px; white-space:nowrap; border-radius:13px; background:var(--card); border:1px solid var(--line);
+  font-size:15px; font-weight:600; display:grid; place-items:center; color:var(--ink)}
+.pbtn.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+.pbtn.thin{flex:0 0 auto; padding:0 12px; font-size:14px; font-weight:500; color:var(--ink2)}
+.pbtn[hidden]{display:none}
+.topright{position:absolute; right:0; top:50%; transform:translateY(-50%); display:flex; gap:2px}
+.topright button{padding:7px 12px; font-size:13.5px; color:var(--accent); font-weight:600;
+  border:1px solid var(--accent); border-radius:999px; opacity:.45}
+.topright button[aria-pressed="true"]{background:var(--accent); color:#fff; opacity:1}
+[hidden]{display:none !important}
+
+/* ===== 作成画面 ===== */
+.make{flex:1 1 auto; display:none; flex-direction:column; min-height:0}
+body.making .levels, body.making .play{display:none}
+body.making .make{display:flex}
+.mkscore{flex:0 0 auto; padding:8px 12px 0}
+.mkhint{text-align:center; font-size:11.5px; color:var(--ink3); margin-top:2px}
+
+.mkcell{width:60px; height:46px; border-radius:9px; border:1px solid var(--line); background:var(--card);
+  display:grid; place-items:center; color:var(--ink2); font-size:10.5px; position:relative}
+.mkcell.sel{border-color:var(--accent); border-width:2px; background:var(--accent-soft)}
+.mkcell b{position:absolute; top:2px; left:5px; font-size:9px; color:var(--ink3); font-weight:600}
+.mkcell.sel b{color:var(--accent)}
+.mkpal{flex:1 1 auto; overflow-y:auto; padding:6px 10px 8px; -webkit-overflow-scrolling:touch}
+.mkpal .lab{font-size:10px; color:var(--ink3); letter-spacing:.06em; margin:2px 0 4px}
+.pal{display:grid; grid-template-columns:repeat(4,1fr); gap:5px}
+.pal button{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:4px 2px 3px;
+  display:flex; flex-direction:column; align-items:center; gap:1px; min-height:52px}
+.pal button span{font-size:8.5px; color:var(--ink3); line-height:1.25; text-align:center}
+.pal button span b{font-size:9.5px}
+.pal button svg{width:100%; height:auto; max-width:40px; color:var(--ink)}
+.pal button span{font-size:10.5px; color:var(--ink3)}
+.pal button:active{background:var(--card2)}
+.mkacts{flex:0 0 auto; display:flex; gap:5px; padding:6px 12px calc(env(safe-area-inset-bottom) + 12px)}
+#mkTie[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700}
+
+/* ===== シート ===== */
+.sheet{position:fixed; inset:0; background:rgb(20 18 24 / 34%); display:none; z-index:30}
+.sheet.open{display:block}
+.sheetbody{position:absolute; left:0; right:0; bottom:0; max-height:88dvh; overflow-y:auto;
+  background:var(--bg); border-radius:20px 20px 0 0; padding:16px 16px calc(env(safe-area-inset-bottom) + 20px)}
+.sheeth{display:flex; align-items:center; margin-bottom:4px}
+.sheeth h2{margin:0; font-size:17px; font-weight:700}
+.sheeth button{margin-left:auto; width:34px; height:34px; border-radius:50%; background:var(--card2);
+  display:grid; place-items:center; font-size:15px; color:var(--ink2)}
+.grp{margin-top:15px}
+.grp>.lab{font-size:11px; color:var(--ink3); letter-spacing:.08em; margin-bottom:6px}
+.seg{display:flex; gap:6px; flex-wrap:wrap}
+.seg button{flex:1 1 auto; min-width:62px; min-height:44px; padding:0 10px; border-radius:11px;
+  border:1px solid var(--line); background:var(--card); font-size:13.5px; color:var(--ink2)}
+.seg button[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700}
+.seg.col{flex-direction:column}
+.seg.col button{text-align:left; padding:10px 13px; line-height:1.45}
+.seg.col button span{display:block; font-size:11px; color:var(--ink3); margin-top:2px}
+.seg.col button[aria-pressed="true"] span{color:rgb(255 255 255 / 78%)}
+.note{font-size:11.5px; color:var(--ink3); line-height:1.65; margin-top:7px}
+.note b{color:var(--ink2); font-weight:600}
+.calbtn{width:100%; min-height:48px; border-radius:12px; background:var(--card); border:1px solid var(--line); font-size:14px}
+table.det{width:100%; border-collapse:collapse; font-size:13px}
+table.det th,table.det td{padding:8px 4px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top}
+table.det th{color:var(--ink3); font-weight:500; width:40%}
+table.det td{font-variant-numeric:tabular-nums}
+.tl{width:100%; height:auto; display:block; margin:8px 0 4px; background:var(--card); border-radius:12px}
+.warnbox{margin-top:10px; padding:10px 12px; border-radius:10px; background:rgb(180 83 9 / 10%);
+  border:1px solid rgb(180 83 9 / 26%); font-size:12.5px; color:var(--warn); line-height:1.6}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="tb1">
+    <button class="back" id="btnBack" hidden>‹</button>
+    <div class="meter" id="meterLabel">4<span>/4</span></div>
+    <button class="gear" id="btnSet" aria-label="設定">⚙</button>
+    <div class="topright" id="playTopRight" hidden><button id="btnCall" aria-pressed="false">お手本</button></div>
+  </div>
+  <div class="tb2" id="bpmRow">
+    <div class="lab">BPM</div>
+    <div class="bpms" id="bpms"></div>
+  </div>
+  <div class="tb3" id="barsRow">
+    <button data-v="1" aria-pressed="true">1小節</button>
+    <button data-v="2" aria-pressed="false">2小節</button>
+    <button data-v="4" aria-pressed="false">4小節</button>
+  </div>
+</div>
+
+<div class="levels" id="levels"></div>
+
+<div class="play" id="play">
+  <div class="beatdots" id="beatdots"><i>1</i><i>2</i><i>3</i><i>4</i></div>
+  <div class="scorewrap"><svg class="score" id="score" viewBox="0 0 360 90"></svg>
+    <div class="reps" id="repsLabel"></div></div>
+  <div class="center">
+    <div class="big" id="bigText">準備</div>
+    <div class="hitote" id="hitote"></div>
+    <div class="streak" id="streak" hidden></div>
+  </div>
+  <div class="pads">
+    <button class="pad" id="padL"><span id="padBeat">♪</span></button>
+  </div>
+  <div class="playacts">
+    <button class="pbtn primary" id="btnMain">スタート</button>
+    <button class="pbtn thin" id="btnDetail" hidden>くわしく</button>
+  </div>
+</div>
+
+<div class="make" id="make">
+  <div class="mkscore"><svg class="score" id="mkScore" viewBox="0 0 360 90"></svg>
+    <div class="mkhint" id="mkHint"></div></div>
+  <div class="mkpal">
+    <div class="pal" id="mkPalNote"></div>
+  </div>
+  <div class="mkacts">
+    <button class="pbtn thin" id="mkTie" aria-pressed="false">⌒ つなぐ</button>
+    <button class="pbtn thin" id="mkUndo">消す</button>
+    <button class="pbtn primary" id="mkPlay">練習</button>
+    <button class="pbtn thin" id="mkShare">リンク</button>
+  </div>
+</div>
+</div>
+
+<!-- ===== 設定シート ===== -->
+<div class="sheet" id="sheetSet">
+ <div class="sheetbody">
+  <div class="sheeth"><h2>設定</h2><button id="closeSet">✕</button></div>
+
+  <div class="grp">
+    <div class="lab">クリックの鳴らし方</div>
+    <div class="seg col" id="segCond">
+      <button data-v="all" aria-pressed="true">全部鳴る<span>外の音に合わせられるか</span></button>
+      <button data-v="down" aria-pressed="false">1拍目だけ<span>小節を感じているか</span></button>
+      <button data-v="half" aria-pressed="false">途中で消える<span>消えても続けられるか</span></button>
+      <button data-v="none" aria-pressed="false">最初だけ<span>自分でテンポを作れるか</span></button>
+    </div>
+    <p class="note">これは難しさの順番ではなく、<b>べつの力を測る4つの条件</b>。クリックを消す条件では、拍の数字も自動で消える（画面が拍を教えてしまうと、先生の声への依存が画面への依存に変わるだけなので）。</p>
+  </div>
+
+  <div class="grp">
+    <div class="lab">シンコペーション（拍をまたぐ音）</div>
+    <div class="seg" id="segSync">
+      <button data-v="off" aria-pressed="true">なし</button>
+      <button data-v="on" aria-pressed="false">出す</button>
+    </div>
+    <p class="note">タイで拍の頭の音を消す形。<b>拍の頭に音が無い</b>のがシンコペーションの正体で、これは叩く位置だけで表せる。<br>ただしタップで測れるのは<b>叩く位置だけ</b>なので、「タイで伸ばす」と「休符で切る」は区別できない。譜面はタイで書く。伸ばす長さはレッスンで見る。</p>
+  </div>
+
+  <div class="grp">
+    <div class="lab">お手本の出し方</div>
+    <div class="seg col" id="segCall">
+      <button data-v="off" aria-pressed="true">譜面を見て叩く<span>お手本は鳴らない。カウントのあと自分の番</span></button>
+      <button data-v="on" aria-pressed="false">お手本 → 叩く<span>カウント→お手本→カウント→自分の番</span></button>
+    </div>
+    <p class="note">この2つは難しさの差ではなく<b>別の力</b>。お手本を聴いてから叩けても、譜面が読めたことにはならない。分けて記録する。</p>
+  </div>
+
+  <div class="grp">
+    <div class="lab">何回でクリアにするか</div>
+    <div class="seg" id="segGoal">
+      <button data-v="1" aria-pressed="true">1回</button>
+      <button data-v="3" aria-pressed="false">3回（連続でなくてよい）</button>
+    </div>
+    <p class="note">3かいモードは<b>毎回ちがう問題</b>が出る（自作の問題のときは同じ問題）。連続でなくてよい。</p>
+  </div>
+
+  <div class="grp">
+    <div class="lab">対象</div>
+    <div class="seg" id="segAge">
+      <button data-v="a" aria-pressed="false">〜8歳</button>
+      <button data-v="b" aria-pressed="true">9〜12歳</button>
+      <button data-v="c" aria-pressed="false">13歳〜</button>
+    </div>
+    <p class="note">正解とみなすはばが変わる（下限 <b>±70／±55／±40ms</b>、音のこまかさに応じて決まる）。実測で決め直す前提の初期値。</p>
+  </div>
+
+  <div class="grp">
+    <div class="lab">叩いた音</div>
+    <div class="seg" id="segSound">
+      <button data-v="on" aria-pressed="true">鳴らす</button>
+      <button data-v="off" aria-pressed="false">鳴らさない</button>
+    </div>
+    <p class="note">Bluetoothだと自分のたたいた音が遅れて返り、次のたたきを乱す。そのときは切る。</p>
+  </div>
+
+  <div class="grp">
+    <div class="lab">ずれの校正（任意）</div>
+    <button class="calbtn" id="btnCal">校正する（20回叩く）</button>
+    <p class="note" id="noteCal"></p>
+  </div>
+ </div>
+</div>
+
+<!-- ===== 詳細シート ===== -->
+<div class="sheet" id="sheetDet">
+ <div class="sheetbody">
+  <div class="sheeth"><h2>くわしく</h2><button id="closeDet">✕</button></div>
+  <svg class="tl" id="timeline" viewBox="0 0 360 222"></svg>
+  <table class="det" id="detTable"></table>
+  <div id="detWarn"></div>
+  <p class="note">位相＝ずれ全体がどちらへ寄っているか（始まりの遅れ）。走り／もたり＝ずれが時間とともにどう傾いたか。この2つは別物で、平均だけ見ると取りちがえる。ばらつきはMAD（中央値からのずれの中央値）で、1回の大外れに引っぱられにくい。</p>
+ </div>
+</div>
+
+<script>
+'use strict';
+/* =========================================================================
+   タンタカ — リズム練習
+   設計正本: Claude Code成果物/2026-08-18_リズム練習アプリ_設計企画書.html（第2版）
+   掟:
+     - 音は AudioContext.currentTime へ先読み予約する。setTimeout で鳴らさない
+     - 測るのは4つ（構造・位相・傾き・ばらつき）。位相と傾きを混同しない
+     - 走り/もたりの判定には8打点以上いる → 小節数に応じて繰り返し回数を決める
+     - 評価する試行では動くものを画面に出さない
+     - 子どもにはひとことだけ。図と数値は「くわしく」へ
+     - 1拍まるごとずらして正解にしない
+     - 点数・パーセント・ランクを出さない
+   ========================================================================= */
+
+/* ---------- 1拍を12ティックで表す（16分=3, 8分=6, 4分=12, 3連=4） ---------- */
+const TICK = 12;
+const CELLS = Object.assign(Object.create(null), {
+  q  : {id:'q',  onsets:[0],       dur:[12],      label:'タン',      kind:'beamed'},
+  ee : {id:'ee', onsets:[0,6],     dur:[6,6],     label:'タ・タ',    kind:'beamed'},
+  qr : {id:'qr', onsets:[],        dur:[],        label:'ウン',      kind:'qrest'},
+  re : {id:'re', onsets:[6],       dur:[6],       label:'ウン・タ',  kind:'restnote'},
+  ss : {id:'ss', onsets:[0,3,6,9], dur:[3,3,3,3], label:'タカタカ',  kind:'beamed'},
+  es : {id:'es', onsets:[0,6,9],   dur:[6,3,3],   label:'タン・タカ',kind:'beamed'},
+  se : {id:'se', onsets:[0,3,6],   dur:[3,3,6],   label:'タカ・タン',kind:'beamed'},
+  dt : {id:'dt', onsets:[0,9],     dur:[9,3],     label:'タッカ',    kind:'beamed'}
+});
+/* 有効なセルidか。CELLS['constructor'] が truthy になる穴を塞ぐ */
+function isCell(x){ return typeof x === 'string' && Object.prototype.hasOwnProperty.call(CELLS, x); }
+
+/* 判定窓に使う「隣り合う合法な位置の最小間隔」を実際の問題から求める（拍単位）。
+   beat/2 を固定で使うと、16分を含む問題で窓が隣と重なり、
+   1回のタップが2つの正解になりうる領域に入る */
+function minGap(measures, ties){
+  let g = Infinity;
+  const on = onsetsOf(measures, ties);
+  for(let i=1;i<on.length;i++){ const d=on[i]-on[i-1]; if(d>0.001) g = Math.min(g, d); }
+  measures.flat().forEach(id=>{
+    const c = CELLS[id]; if(!c) return;
+    c.dur.forEach(d=>{ if(d>0) g = Math.min(g, d/TICK); });
+  });
+  return (!isFinite(g) || g<=0) ? 0.5 : g;
+}
+/* 打点が同じになる型は同時に出さない（例: 4分音符と「8分＋8分休符」は
+   タップでは区別できない）。上の4種はどれも打点の並びが異なる。 */
+
+/* ---------- 音（先読みスケジューラ） ---------- */
+const Audio_ = {
+  ctx:null, master:null, queue:[], timer:null, tapOn:true,
+  async ensure(){
+    if(!this.ctx){
+      this.ctx = new (window.AudioContext||window.webkitAudioContext)();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.9;
+      this.master.connect(this.ctx.destination);
+    }
+    if(this.ctx.state !== 'running'){ try{ await this.ctx.resume(); }catch(e){} }
+    return this.ctx;
+  },
+  // click: 短い減衰音。type で音色を変える
+  click(time, type){
+    const c = this.ctx; if(!c) return;
+    const g = c.createGain(), o = c.createOscillator();
+    let f=1000, dur=0.045, vol=0.5;
+    if(type==='down'){ f=1500; vol=0.55; }
+    else if(type==='beat'){ f=1000; vol=0.34; }
+    else if(type==='model'){ f=660; dur=0.06; vol=0.5; }
+    else if(type==='tap'){ f=440; dur=0.035; vol=0.3; }
+    else if(type==='ok'){ f=880; dur=0.12; vol=0.4; }
+    o.type = (type==='model') ? 'triangle' : 'square';
+    o.frequency.setValueAtTime(f, time);
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(vol, time+0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, time+dur);
+    o.connect(g); g.connect(this.master);
+    o.start(time); o.stop(time+dur+0.02);
+  },
+  schedule(events){ // [{t: audioTime, type}]
+    this.queue = this.queue.concat(events).sort((a,b)=>a.t-b.t);
+    if(!this.timer) this.timer = setInterval(()=>this.pump(), 25);
+  },
+  pump(){
+    if(!this.ctx) return;
+    const horizon = this.ctx.currentTime + 0.12;
+    while(this.queue.length && this.queue[0].t <= horizon){
+      const e = this.queue.shift();
+      if(e.t > this.ctx.currentTime - 0.05) this.click(e.t, e.type);
+    }
+    if(!this.queue.length){ clearInterval(this.timer); this.timer=null; }
+  },
+  clear(){ this.queue=[]; if(this.timer){ clearInterval(this.timer); this.timer=null; } },
+  now(){ return this.ctx ? this.ctx.currentTime : 0; }
+};
+
+/* ---------- 問題の生成 ---------- */
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+function generate(bars, allowed){
+  // allowed: 使用するセルidの配列。着地用は音のある型に限る
+  const landing = allowed.filter(id => CELLS[id].onsets.length>0 && id!=='re');
+  const land = landing.length ? landing : ['q'];
+  for(let attempt=0; attempt<80; attempt++){
+    const ms = [];
+    for(let b=0; b<bars; b++){
+      const cells = [];
+      for(let i=0;i<4;i++){
+        let c, guard=0;
+        do{ c = pick(allowed); guard++; }
+        while(guard<12 && cells.length && c===cells[cells.length-1] && Math.random()<0.55);
+        cells.push(c);
+      }
+      // 最後の小節の最後の拍は着地しやすい型に
+      if(b===bars-1) cells[3] = pick(land);
+      ms.push(cells);
+    }
+    // 全部休符の小節を弾く／打点ゼロを弾く
+    const total = ms.flat().reduce((n,id)=>n+CELLS[id].onsets.length,0);
+    const emptyBar = ms.some(m => m.every(id=>CELLS[id].onsets.length===0));
+    if(total>=2 && !emptyBar) return ms;
+  }
+  return [['q','q','q','q']];
+}
+
+/* タイを後から掛ける。拍の境目を選んで、後ろの拍の先頭の音を消す。
+   これで拍頭に音が無い形＝シンコペーションができる。
+   最初の拍と最後の拍には掛けない（着地を残す） */
+function makeTies(cells, rate, barsPerRow){
+  const ties = cells.map(()=>false);
+  if(!rate) return ties;
+  const rowBeats = (barsPerRow || 99) * 4;      // 段の折り返し位置
+  for(let k=1; k<cells.length-1; k++){
+    if(!canTie(cells, k)) continue;
+    if(ties[k-1]) continue;                     // タイを連続させない
+    if(k % rowBeats === 0) continue;            // 段をまたぐタイは弧を描けないので作らない
+    if(Math.random() < rate) ties[k] = true;
+  }
+  return ties;
+}
+/* 何小節を1段に置くか。renderScore と同じ規則にする */
+function barsPerRowFor(bars){ return bars >= 3 ? 2 : bars; }
+
+/* 小節構成 → 打点(拍単位の実数)の並び。
+   ties[k] が真なら、k番目の拍の先頭の音は前の音と繋がっている＝叩かない。
+   これがシンコペーションの実体で、打点の位置だけで完全に表現できる。
+   （タップで測れないのは「音の長さ」であって、拍をまたぐこと自体は測れる） */
+function onsetsOf(measures, ties){
+  const out = [];
+  let k = 0;
+  measures.forEach((m, bi)=>{
+    m.forEach((id, ci)=>{
+      const tied = ties && ties[k];
+      CELLS[id].onsets.forEach((t, oi)=>{
+        if(tied && oi === 0 && t === 0) return;      // 拍頭の音は前と繋がっているので叩かない
+        out.push((bi*4 + ci) + t/TICK);
+      });
+      k++;
+    });
+  });
+  return out.sort((a,b)=>a-b);
+}
+/* その拍にタイを掛けられるか。
+   前の拍に音があり、この拍の先頭に音があるときだけ繋げる */
+function canTie(cells, k){
+  if(k <= 0) return false;
+  const prev = CELLS[cells[k-1]], cur = CELLS[cells[k]];
+  return prev.onsets.length > 0 && cur.onsets.length > 0 && cur.onsets[0] === 0;
+}
+
+/* ---------- 判定 ---------- */
+function median(a){
+  if(!a.length) return 0;
+  const s=[...a].sort((x,y)=>x-y), h=s.length>>1;
+  return s.length%2 ? s[h] : (s[h-1]+s[h])/2;
+}
+function mad(a){
+  if(!a.length) return 0;
+  const m = median(a);
+  return median(a.map(v=>Math.abs(v-m)));
+}
+// 最小二乗の傾き（x=正解時刻[s], y=ずれ[s]）
+function slope(xs, ys){
+  const n=xs.length; if(n<3) return null;
+  const mx=xs.reduce((a,b)=>a+b,0)/n, my=ys.reduce((a,b)=>a+b,0)/n;
+  let num=0, den=0;
+  for(let i=0;i<n;i++){ num+=(xs[i]-mx)*(ys[i]-my); den+=(xs[i]-mx)**2; }
+  return den===0 ? null : num/den;
+}
+
+/* 順序を保った対応づけ（編集距離と同じ動的計画法）
+   貪欲な最近傍だと、1つ余分に叩いた時点で以降が総崩れになるので使わない */
+function align(expected, actual, penalty){
+  const n=expected.length, m=actual.length;
+  const D = Array.from({length:n+1}, ()=>new Float64Array(m+1));
+  const P = Array.from({length:n+1}, ()=>new Uint8Array(m+1));
+  for(let i=1;i<=n;i++){ D[i][0]=D[i-1][0]+penalty; P[i][0]=1; }
+  for(let j=1;j<=m;j++){ D[0][j]=D[0][j-1]+penalty; P[0][j]=2; }
+  for(let i=1;i<=n;i++) for(let j=1;j<=m;j++){
+    const cost = Math.abs(expected[i-1]-actual[j-1]);
+    const a = D[i-1][j-1] + Math.min(cost, penalty*1.9); // 対応
+    const b = D[i-1][j]   + penalty;                     // 抜け
+    const c = D[i][j-1]   + penalty;                     // 余分
+    if(a<=b && a<=c){ D[i][j]=a; P[i][j]=0; }
+    else if(b<=c)   { D[i][j]=b; P[i][j]=1; }
+    else            { D[i][j]=c; P[i][j]=2; }
+  }
+  const pairs=[], missed=[], extra=[];
+  let i=n, j=m;
+  while(i>0 || j>0){
+    const p = (i>0&&j>0) ? P[i][j] : (i>0?1:2);
+    if(p===0){ pairs.push([i-1, j-1]); i--; j--; }
+    else if(p===1){ missed.push(i-1); i--; }
+    else { extra.push(j-1); j--; }
+  }
+  pairs.reverse(); missed.reverse(); extra.reverse();
+  return {pairs, missed, extra};
+}
+
+/* 判定窓: W = min(0.40*d, max(F, min(alpha*d, C)))
+   d = その打点から最も近い別の合法な拍内位置までの時間 */
+function windowFor(d, prof){
+  return Math.min(0.40*d, Math.max(prof.F, Math.min(prof.alpha*d, prof.C)));
+}
+const AGE = {
+  a:{F:0.070, alpha:0.22, C:0.130, name:'〜8さい'},
+  b:{F:0.055, alpha:0.18, C:0.100, name:'9〜12さい'},
+  c:{F:0.040, alpha:0.15, C:0.080, name:'13さい〜'}
+};
+</script>
+
+<script>
+'use strict';
+/* =========================================================================
+   音価つきイベント列（内部の正本）
+   セル（1拍の型）は入力マクロへ降格し、保存も判定もこの列で行う。
+   拍で閉じる制約を外したので、2分音符・全音符・拍をまたぐ音が書ける。
+   単位は 4分音符 = 12 ティック（1拍ではない。6/8の主拍は付点4分=18）
+   ========================================================================= */
+const DUR = {
+  w  : {d:48, name:'全音符',  beats:'4拍'},
+  hd : {d:36, name:'付点2分音符',   beats:'3拍'},
+  h  : {d:24, name:'2分音符',   beats:'2拍'},
+  qd : {d:18, name:'付点4分音符',   beats:'1拍半'},
+  q  : {d:12, name:'4分音符',   beats:'1拍'},
+  ed : {d:9,  name:'付点8分音符',   beats:'3/4拍'},
+  e  : {d:6,  name:'8分音符',   beats:'半拍'},
+  s  : {d:3,  name:'16分音符',  beats:'1/4拍'}
+};
+const DUR_ORDER = ['w','h','qd','q','ed','e','s'];
+
+/* イベント: {d: ティック, rest: 休符か, tie: 前の音と繋がるか} */
+function evOnsets(ev){                       // 打点（4分音符=1 の単位）
+  const out=[]; let t=0;
+  ev.forEach(e=>{ if(!e.rest && !e.tie) out.push(t/TICK); t+=e.d; });
+  return out;
+}
+function evTotal(ev){ return ev.reduce((a,e)=>a+e.d, 0); }
+/* 判定窓に使う最小の刻み（4分音符=1 の単位）。
+   実際に出てくる音価と打点間隔の、いちばん細かいものを見る */
+function minGapEv(ev){
+  let g = Infinity;
+  const on = evOnsets(ev);
+  for(let i=1;i<on.length;i++){ const d=on[i]-on[i-1]; if(d>0.001) g=Math.min(g,d); }
+  ev.forEach(e=>{ if(e.d>0) g = Math.min(g, e.d/TICK); });
+  return (!isFinite(g)||g<=0) ? 0.5 : g;
+}
+
+/* セル列 → イベント列（ランダム生成の結果を正本の形へ移す） */
+function cellsToEvents(cells, ties){
+  const ev=[];
+  cells.forEach((id,k)=>{
+    const c = CELLS[id];
+    if(!c) return;
+    if(c.onsets.length===0){ ev.push({d:TICK, rest:true}); return; }
+    if(c.onsets[0] > 0) ev.push({d:c.onsets[0], rest:true});
+    let end = c.onsets[0];
+    c.onsets.forEach((t,i)=>{
+      ev.push({d:c.dur[i], rest:false, tie: (i===0 && !!(ties && ties[k]))});
+      end = t + c.dur[i];
+    });
+    if(end < TICK) ev.push({d:TICK-end, rest:true});
+  });
+  return mergeTies(ev);
+}
+/* タイで繋がった音は、書ける音価なら1つの音符にまとめる。
+   （4/4の1〜2拍を「4分＋タイ＋4分」で書くのは記譜の規則違反。2分音符で書く） */
+function mergeTies(ev){
+  const out=[];
+  ev.forEach(e=>{
+    const prev = out[out.length-1];
+    if(e.tie && prev && !prev.rest){
+      const sum = prev.d + e.d;
+      if(writable(sum) && startsOn(out, sum)){ prev.d = sum; return; }
+    }
+    out.push(Object.assign({}, e));
+  });
+  return out;
+}
+function writable(d){ return DUR_ORDER.some(k=>DUR[k].d===d); }
+/* その音が「単一音価で書いてよい位置」にあるか。
+   拍節を隠す綴りを避ける: 小節の前半/後半をまたぐ音は分けて書く */
+function startsOn(out, sum){
+  const at = out.slice(0,-1).reduce((a,e)=>a+e.d,0);
+  const bar = 48;                                   // 4/4
+  const inBar = at % bar;
+  if(sum >= bar) return inBar === 0;
+  if(inBar < bar/2 && inBar + sum > bar/2) return sum === bar/2 && inBar === 0;
+  return Math.floor(inBar/bar) === Math.floor((inBar+sum-1)/bar);
+}
+
+/* イベント列を小節へ分ける。跨る音は分割してタイで繋ぐ（記譜の規則） */
+function splitBars(ev, barTicks){
+  const bars=[[]]; let t=0;
+  ev.forEach(e=>{
+    let left = e.d, tie = !!e.tie;
+    while(left > 0){
+      const room = barTicks - (t % barTicks);
+      const take = Math.min(left, room);
+      bars[bars.length-1].push({d:take, rest:e.rest, tie:tie});
+      t += take; left -= take;
+      if(left > 0){ tie = !e.rest; bars.push([]); }
+      else if(t % barTicks === 0){ bars.push([]); }   // 小節線ちょうどで終わった
+    }
+  });
+  // 末尾の空小節を落とす
+  while(bars.length>1 && bars[bars.length-1].length===0) bars.pop();
+  return bars;
+}
+/* 音価 → 書ける形（音符の種類と付点）に分解。書けない長さはタイで割る */
+function spell(d){
+  const out=[];
+  let left=d, guard=0;
+  while(left>0 && guard++<8){
+    let best=null;
+    DUR_ORDER.forEach(k=>{ if(DUR[k].d<=left && (!best || DUR[k].d>DUR[best].d)) best=k; });
+    if(!best) break;
+    out.push(best); left -= DUR[best].d;
+  }
+  return out;
+}
+</script>
+
+<script>
+'use strict';
+/* ---------- リズム譜の描画（1線譜・自前SVG） ----------
+   VexFlow は使わない。4分・8分・休符だけなら連桁は「拍内の8分2つ」に限られ、
+   自前で正しく描ける。記譜エンジンより先に測定の信用を立てる、という順番。 */
+const SC = {
+  W: 360, PADX: 14, BASE: 42, ROWH: 66,
+  STEM: 29, HEADR: 4.7
+};
+function renderScore(measures, opts){
+  opts = opts || {};
+  const showMeter = !!opts.meter;                 // 4/4 の拍子記号を先頭に出すか
+  const padL = showMeter ? 34 : SC.PADX;
+  const perRow = measures.length >= 3 ? 2 : measures.length; // 4小節は2段に折り返す
+  const rows = Math.ceil(measures.length / perRow);
+  const barw = (SC.W - padL - SC.PADX) / perRow;
+  const H = rows * SC.ROWH + 20;
+  let s = '';
+  const beatMarks = [];
+
+  for(let r=0; r<rows; r++){
+    const y = SC.BASE + r*SC.ROWH;
+    const x0 = padL, x1 = padL + barw*Math.min(perRow, measures.length - r*perRow);
+    s += `<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="currentColor" stroke-width="1.1" opacity=".55"/>`;
+    if(showMeter && r === 0){          // 拍子記号は曲頭だけ（段ごとに繰り返さない）
+      s += `<text x="${padL-20}" y="${y-1}" font-size="12.5" font-weight="700" fill="currentColor" opacity=".9">4</text>`;
+      s += `<text x="${padL-20}" y="${y+12}" font-size="12.5" font-weight="700" fill="currentColor" opacity=".9">4</text>`;
+    }
+    for(let k=0; k<=perRow; k++){
+      const bi = r*perRow + k;
+      if(bi > measures.length) break;
+      const x = padL + barw*k;
+      if(x > x1+0.5) break;
+      if(k === 0 && r > 0) continue;                       // 段頭に小節線は引かない
+      const last = (bi === measures.length);
+      if(last){                                            // 終止線（細+太）
+        s += `<line x1="${x-4}" y1="${y-13}" x2="${x-4}" y2="${y+13}" stroke="currentColor" stroke-width="1.3" opacity=".75"/>`;
+        s += `<line x1="${x-0.5}" y1="${y-13}" x2="${x-0.5}" y2="${y+13}" stroke="currentColor" stroke-width="3.4" opacity=".75"/>`;
+      } else {
+        s += `<line x1="${x}" y1="${y-13}" x2="${x}" y2="${y+13}" stroke="currentColor" stroke-width="1.4" opacity=".7"/>`;
+      }
+    }
+  }
+
+  measures.forEach((m, bi)=>{
+    const r = Math.floor(bi/perRow), k = bi % perRow;
+    const y = SC.BASE + r*SC.ROWH;
+    const bx = padL + barw*k;
+    const bw = barw;
+    // 音符の多い拍ほど幅を広く取る（等分すると16分が団子になる）。
+    // 余白は小節の頭に一度だけ取り、拍の中には挟まない。
+    // 拍の中にも余白を入れると、同じ半拍が拍内と拍またぎで違う長さに描かれる。
+    const ws = m.map(id => 1 + 0.34*Math.max(0, CELLS[id].onsets.length-1));
+    const wsum = ws.reduce((a,b)=>a+b,0) || 1;
+    const IN = bw*0.055;                             // 小節線から最初の音符まで
+    const inner = bw - IN;
+    let acc = IN;
+    m.forEach((id, ci)=>{
+      const cell = CELLS[id];
+      const w = inner*ws[ci]/wsum;
+      const cx = bx + acc + w/2;                     // その拍の中心
+      const half = w/2;
+      const noteXs = noteXsOf(cell, cx, w/2);
+      beatMarks.push({beat: bi*4+ci, x: bx + acc, y, notes:noteXs, row:r});
+      acc += w;
+      if(cell.kind === 'beamed'){
+        s += drawBeamed(cell, cx, half, y);
+      } else if(cell.kind === 'qrest'){
+        s += qrest(cx - half*0.30, y);
+      } else if(cell.kind === 'restnote'){
+        // 休符も音符と同じ格子に乗せる（うらの音が型によって別の場所に来ないように）
+        const L = cx - half, W2 = half*2;
+        const gx = t => L + (t/TICK)*W2;
+        s += erest(gx(0)+2.5, y) + head(gx(6),y) + stem(gx(6),y) + flag(gx(6),y);
+      }
+    });
+  });
+  // タイの弧: 前の拍の最後の音符から、この拍の先頭の音符へ
+  if(opts.ties){
+    beatMarks.forEach((bm, k)=>{
+      if(!opts.ties[k] || k===0) return;
+      const prev = beatMarks[k-1];
+      if(!prev || !prev.notes.length || !bm.notes.length) return;
+      const x1 = prev.notes[prev.notes.length-1], x2 = bm.notes[0];
+      if(prev.row !== bm.row) return;                 // 段をまたぐタイは省略
+      const y1 = prev.y + SC.HEADR + 3.4;
+      // 端点のマージンを固定にすると、拍が狭いときに弧が消えるほど短くなる
+      const span = x2 - x1;
+      const inset = Math.min(SC.HEADR*0.75, span*0.16);
+      const a = x1 + inset, b = x2 - inset;
+      if(b - a < 2.5) return;
+      const mx = (a+b)/2, dip = Math.min(8, Math.max(4.5, (b-a)*0.30));
+      s += `<path d="M${a} ${y1} Q${mx} ${y1+dip} ${b} ${y1}" fill="none" stroke="currentColor" stroke-width="1.7" opacity=".9"/>`;
+    });
+  }
+  return {svg:s, height:H, beats:beatMarks, viewBox:`0 0 ${SC.W} ${H}`};
+}
+/* 音符と連桁をまとめて描く。
+   連桁の本数は音価から決める（8分=1本, 16分=2本）。隣り合う音の間は
+   両方の本数の小さいほう。孤立した16分には短い突起を出す。 */
+function beamCount(d){ return d<=3 ? 2 : (d<=9 ? 1 : 0); }
+/* 拍の中の位置は、時間に比例させる。
+   「最初の音符から最後の音符まで」を幅一杯に張ると、均等な8分が不均等に描かれ、
+   タッカの16分が均等8分と同じ位置に来てしまう（＝譜面が読み違いを教える）。
+   拍の左端からの比率で置き、右端は次の拍と接しないよう少し内側で止める。 */
+function noteXsOf(cell, cx, half){
+  if(cell.onsets.length === 0) return [];
+  const L = cx - half, W = half*2;
+  return cell.onsets.map(t => L + (t/TICK)*W);   // 拍の中の位置は時間に正比例
+}
+function drawBeamed(cell, cx, half, y){
+  const n = cell.onsets.length;
+  if(n === 0) return '';
+  const xs = noteXsOf(cell, cx, half);
+  const lv = cell.dur.map(beamCount);
+  let out = '';
+  xs.forEach((x,i)=> out += head(x,y) + stem(x,y));
+  const sx = i => xs[i] + SC.HEADR - 0.2;          // 符幹のx
+  const by = k => y - SC.STEM + (k-1)*6.0;          // k本目の連桁のy
+  if(n === 1){
+    if(lv[0] >= 1) out += flag(xs[0], y);           // 単独の8分・16分は旗
+    return out;
+  }
+  for(let k=1; k<=2; k++){
+    let i = 0;
+    while(i < n){
+      if(lv[i] < k){ i++; continue; }
+      let j = i;
+      while(j+1 < n && lv[j+1] >= k) j++;
+      if(j > i){
+        out += `<line x1="${sx(i)}" y1="${by(k)}" x2="${sx(j)}" y2="${by(k)}" stroke="currentColor" stroke-width="3.9" stroke-linecap="butt"/>`;
+      } else if(k === 2){
+        // 孤立した16分: 短い突起。前に音があれば左向き、なければ右向き
+        const dir = (i > 0 && lv[i-1] < 2) ? -1 : 1;
+        out += `<line x1="${sx(i)}" y1="${by(k)}" x2="${sx(i)+dir*6.2}" y2="${by(k)}" stroke="currentColor" stroke-width="3.9" stroke-linecap="butt"/>`;
+      }
+      i = j + 1;
+    }
+  }
+  // 付点（付点8分など: 音価9）
+  cell.dur.forEach((d,i)=>{ if(d===9) out += `<circle cx="${xs[i]+SC.HEADR+3.6}" cy="${y-5.2}" r="1.6" fill="currentColor"/>`; });
+  return out;
+}
+function head(x,y){ return `<ellipse cx="${x}" cy="${y}" rx="${SC.HEADR+0.9}" ry="${SC.HEADR-0.5}" fill="currentColor" transform="rotate(-16 ${x} ${y})"/>`; }
+function stem(x,y){ return `<line x1="${x+SC.HEADR-0.2}" y1="${y-1.6}" x2="${x+SC.HEADR-0.2}" y2="${y-SC.STEM}" stroke="currentColor" stroke-width="1.5"/>`; }
+function flag(x,y){
+  const sx = x+SC.HEADR-0.2, sy = y-SC.STEM;
+  return `<path d="M${sx} ${sy} q7 4 7.5 10 q0.4 4.5 -2.5 8 q2 -6 -1.5 -10 q-1.6 -2 -3.5 -3.2 z" fill="currentColor"/>`;
+}
+/* 4分休符: 上からジグザグ3本 + 下端の左へ開くフック */
+function qrest(x,y){
+  const zig = `M${x-3.8} ${y-12} L${x+2.2} ${y-5.4} L${x-3.2} ${y+0.6} L${x+2.8} ${y+7.0}`;
+  const hook = `M${x+2.8} ${y+7.0} c-6.6 -2.2 -8.0 4.8 -1.0 7.6 c-7.8 -1.2 -8.0 -9.8 -1.0 -9.2 z`;
+  return `<path d="${zig}" fill="none" stroke="currentColor" stroke-width="3.1" stroke-linejoin="miter" stroke-linecap="butt"/>`
+       + `<path d="${hook}" fill="currentColor"/>`;
+}
+/* 8分休符: 右上から左下への斜め軸 + 上端左の玉 */
+function erest(x,y){
+  return `<g fill="currentColor">`
+    + `<path d="M${x+2.2} ${y-9.2} l2.7 -0.4 l-5.2 14.6 l-2.4 -0.6 z"/>`
+    + `<circle cx="${x-1.1}" cy="${y-6.3}" r="3.0"/>`
+    + `<path d="M${x-1.1} ${y-9.3} q4.2 0.3 4.4 2.7 l-2.0 0.5 q-0.5 -2.0 -2.7 -2.1 z"/>`
+    + `</g>`;
+}
+
+/* ---------- 結果の図（くわしく用） ----------
+   上段 = 時間軸に並べた正解と自分の打点（抜け・余分がここで見える）
+   下段 = ずれの大きさそのもの。上段だけだと、数十ミリ秒のずれは
+          曲全体の長さに対して小さすぎて見えない（鏡として機能しない） */
+function renderTimeline(expected, actual, pairs, missed, extra, span, opt){
+  opt = opt || {};
+  const W=360, L=26, R=344, yE=38, yA=74;
+  const X = t => L + (R-L) * (span<=0 ? 0 : t/span);
+  const missSet=new Set(missed), exSet=new Set(extra);
+  let s = `<text x="10" y="18" font-size="11" fill="#6b6773">正かい</text>`;
+  s += `<text x="10" y="103" font-size="11" fill="#6b6773">たたいた位置</text>`;
+  s += `<line x1="${L}" y1="${yE}" x2="${R}" y2="${yE}" stroke="#9a96a3" stroke-width="1"/>`;
+  s += `<line x1="${L}" y1="${yA}" x2="${R}" y2="${yA}" stroke="#9a96a3" stroke-width="1"/>`;
+  pairs.forEach(([i,j])=>{
+    s += `<line x1="${X(expected[i])}" y1="${yE+5}" x2="${X(actual[j])}" y2="${yA-5}" stroke="#1f7a52" stroke-width="1.1" opacity=".55"/>`;
+  });
+  expected.forEach((t,i)=>{
+    const m = missSet.has(i);
+    s += `<circle cx="${X(t)}" cy="${yE}" r="4.6" fill="${m?'#b3243f':'#1d5fa8'}"/>`;
+    if(m) s += `<text x="${X(t)}" y="${yE-10}" font-size="10.5" font-weight="600" fill="#b3243f" text-anchor="middle">ぬけ</text>`;
+  });
+  actual.forEach((t,j)=>{
+    const e = exSet.has(j);
+    s += `<circle cx="${X(t)}" cy="${yA}" r="4.6" fill="none" stroke="${e?'#b3243f':'currentColor'}" stroke-width="1.5"/>`;
+    if(e) s += `<text x="${X(t)}" y="${yA+15}" font-size="10.5" font-weight="600" fill="#b3243f" text-anchor="middle">よぶん</text>`;
+  });
+
+  // ---- 下段: ずれの大きさ（位相を引いた後） ----
+  const win = opt.window || 0.06, ph = opt.phase || 0;
+  const ds = pairs.map(([i,j])=> (actual[j]-expected[i]) - ph);
+  const maxAbs = ds.length ? Math.max(...ds.map(Math.abs)) : 0;
+  const scale = Math.max(win*1.7, maxAbs*1.18, 0.02);
+  const yZ = 168, AMP = 46;
+  const Y = d => yZ - (d/scale)*AMP;      // 上=はやい, 下=おそい
+  s += `<text x="10" y="131" font-size="11" fill="#6b6773">ずれの大きさ（始まりのずれを引いたあと）</text>`;
+  s += `<rect x="${L}" y="${Y(win)}" width="${R-L}" height="${Y(-win)-Y(win)}" fill="#1f7a52" opacity=".13"/>`;
+  s += `<line x1="${L}" y1="${yZ}" x2="${R}" y2="${yZ}" stroke="#9a96a3" stroke-width="1"/>`;
+  s += `<text x="10" y="${Y(win)-3}" font-size="10.5" fill="#6b6773">はやい</text>`;
+  s += `<text x="10" y="${Y(-win)+11}" font-size="10.5" fill="#6b6773">おそい</text>`;
+  s += `<text x="${R}" y="${yZ-4}" font-size="10" fill="#6b6773" text-anchor="end">みどりの帯＝正かいのはば ±${Math.round(win*1000)}ms</text>`;
+  pairs.forEach(([i,j],k)=>{
+    const x = X(expected[i]), d = ds[k], y = Math.max(118, Math.min(yZ+AMP+4, Y(d)));
+    const out = Math.abs(d) > win;
+    s += `<line x1="${x}" y1="${yZ}" x2="${x}" y2="${y}" stroke="${out?'#b45309':'#1f7a52'}" stroke-width="2.2" stroke-linecap="round"/>`;
+    s += `<circle cx="${x}" cy="${y}" r="3.4" fill="${out?'#b45309':'#1f7a52'}"/>`;
+    if(out) s += `<text x="${x}" y="${d>0? y+13 : y-7}" font-size="11" font-weight="600" fill="#b45309" text-anchor="middle">${d>0?'+':''}${Math.round(d*1000)}</text>`;
+  });
+  return s;
+}
+</script>
+
+<script>
+'use strict';
+/* =========================================================================
+   イベント列を譜面に描く。
+   拍で閉じないので、2分音符・全音符・拍をまたぐ音が描ける。
+   連桁は「同じ拍の中で8分以下の音が続くところ」だけに掛ける。
+   ========================================================================= */
+function renderEvents(ev, opts){
+  opts = opts || {};
+  const barTicks = opts.barTicks || 48;             // 4/4（パレットでは音価ぶんだけ）
+  const bars = splitBars(ev, barTicks);
+  const showMeter = !!opts.meter;
+  const padL = showMeter ? 34 : SC.PADX;
+  const perRow = bars.length >= 3 ? 2 : bars.length || 1;
+  const rows = Math.ceil(bars.length / perRow);
+  const barw = (SC.W - padL - SC.PADX) / perRow;
+  const H = rows * SC.ROWH + (opts.chant ? 26 : 20);
+  let s = '';
+  const marks = [];
+
+  for(let r=0; r<rows; r++){
+    const y = SC.BASE + r*SC.ROWH;
+    const cnt = Math.min(perRow, bars.length - r*perRow);
+    const x0 = padL;
+    // 単独表示（パレット）では、譜線を音符の周りだけに短く引く
+    const x1 = opts.bare ? padL + 62 : padL + barw*cnt;
+    s += `<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="currentColor" stroke-width="1.1" opacity=".55"/>`;
+    if(showMeter && r===0){
+      s += `<text x="${padL-20}" y="${y-1}" font-size="12.5" font-weight="700" fill="currentColor" opacity=".9">4</text>`;
+      s += `<text x="${padL-20}" y="${y+12}" font-size="12.5" font-weight="700" fill="currentColor" opacity=".9">4</text>`;
+    }
+    for(let k=0; k<=cnt; k++){
+      const x = padL + barw*k;
+      if(k===0 && r>0) continue;
+      if(opts.bare) continue;
+      const isLast = (r*perRow + k === bars.length);
+      if(isLast){
+        s += `<line x1="${x-4}" y1="${y-13}" x2="${x-4}" y2="${y+13}" stroke="currentColor" stroke-width="1.3" opacity=".75"/>`;
+        s += `<line x1="${x-0.6}" y1="${y-13}" x2="${x-0.6}" y2="${y+13}" stroke="currentColor" stroke-width="3.4" opacity=".75"/>`;
+      } else {
+        s += `<line x1="${x}" y1="${y-13}" x2="${x}" y2="${y+13}" stroke="currentColor" stroke-width="1.4" opacity=".7"/>`;
+      }
+    }
+  }
+
+  let globalT = 0;
+  bars.forEach((bar, bi)=>{
+    const r = Math.floor(bi/perRow), k = bi % perRow;
+    const y = SC.BASE + r*SC.ROWH;
+    const bx = padL + barw*k;
+    const IN = barw*0.055, inner = barw - IN;
+
+    // 拍ごとの重み（音符が多い拍を広く）
+    const w4 = [0,0,0,0];
+    let t = 0;
+    bar.forEach(e=>{ const b = Math.min(3, Math.floor(t/TICK)); if(!e.rest) w4[b]++; t += e.d; });
+    const ws = w4.map(n => 1 + 0.34*Math.max(0, n-1));
+    const wsum = ws.reduce((a,b)=>a+b,0) || 4;
+    const beatX = [], beatW = [];
+    let acc = IN;
+    for(let b=0;b<4;b++){ beatW[b] = inner*ws[b]/wsum; beatX[b] = bx + acc; acc += beatW[b]; }
+    const X = tick => {                                   // 小節内ティック → x
+      const b = Math.min(3, Math.floor(tick/TICK));
+      return beatX[b] + ((tick - b*TICK)/TICK)*beatW[b];
+    };
+
+    // 連桁グループ: 同じ拍の中で 8分以下の音が続くところ
+    const notes = [];
+    t = 0;
+    bar.forEach(e=>{ notes.push({t, e}); t += e.d; });
+    const groups = [];
+    let cur = null;
+    notes.forEach(n=>{
+      const beamable = !n.e.rest && n.e.d <= 6;
+      const b = Math.floor(n.t/TICK);
+      if(beamable && cur && cur.beat===b) cur.items.push(n);
+      else { if(cur && cur.items.length>1) groups.push(cur);
+             cur = beamable ? {beat:b, items:[n]} : null; }
+    });
+    if(cur && cur.items.length>1) groups.push(cur);
+    const inGroup = new Set();
+    groups.forEach(g=> g.items.forEach(n=> inGroup.add(n.t)));
+
+    notes.forEach(n=>{
+      const x = X(n.t), e = n.e;
+      if(e.rest){
+        s += drawRest(x, y, e.d, opts.bare ? 0 : beatW[Math.min(3,Math.floor(n.t/TICK))]);
+        if(opts.chant) s += chantText(x, y, 'ウン');
+        return;
+      }
+      s += drawNote(x, y, e.d, !inGroup.has(n.t));
+      if(opts.chant) s += chantText(x, y, e.tie ? 'ー' : syllable(n.t % TICK, e.d));
+      marks.push({t: globalT + n.t, x, y, row:r, tie:e.tie});
+    });
+
+    // 連桁
+    groups.forEach(g=>{
+      const xs = g.items.map(n=> X(n.t) + SC.HEADR - 0.2);
+      const lv = g.items.map(n=> n.e.d<=3 ? 2 : 1);
+      for(let level=1; level<=2; level++){
+        let i=0;
+        while(i<xs.length){
+          if(lv[i]<level){ i++; continue; }
+          let j=i; while(j+1<xs.length && lv[j+1]>=level) j++;
+          const by = y - SC.STEM + (level-1)*6.0;
+          if(j>i) s += `<line x1="${xs[i]}" y1="${by}" x2="${xs[j]}" y2="${by}" stroke="currentColor" stroke-width="3.9" stroke-linecap="butt"/>`;
+          else if(level===2){
+            const dir = (i>0 && lv[i-1]<2) ? -1 : 1;
+            s += `<line x1="${xs[i]}" y1="${by}" x2="${xs[i]+dir*6.2}" y2="${by}" stroke="currentColor" stroke-width="3.9" stroke-linecap="butt"/>`;
+          }
+          i=j+1;
+        }
+      }
+    });
+    globalT += barTicks;
+  });
+
+  // タイの弧
+  marks.forEach((m,i)=>{
+    if(!m.tie || i===0) return;
+    const prev = marks[i-1];
+    if(prev.row !== m.row) return;
+    const span = m.x - prev.x;
+    const inset = Math.min(SC.HEADR*0.75, Math.abs(span)*0.16);
+    const a = prev.x + inset, b = m.x - inset;
+    if(b - a < 2.5) return;
+    const y1 = prev.y + SC.HEADR + 3.4, mx = (a+b)/2;
+    const dip = Math.min(8, Math.max(4.5, (b-a)*0.30));
+    s += `<path d="M${a} ${y1} Q${mx} ${y1+dip} ${b} ${y1}" fill="none" stroke="currentColor" stroke-width="1.7" opacity=".9"/>`;
+  });
+
+  return {svg:s, height:H, viewBox:`0 0 ${SC.W} ${H}`, marks};
+}
+
+/* 口唱歌の音節。拍の中のどこにいるかで「タ」と「カ」が決まり、
+   音価で伸ばし方が決まる。（16分の2つ目・4つ目だけが「カ」） */
+function syllable(tickInBeat, d){
+  const base = (tickInBeat % 6 === 0) ? 'タ' : 'カ';
+  if(d >= 36) return base + 'ーー';
+  if(d >= 24) return base + 'ー';
+  if(d >= 18) return base + 'ーン';
+  if(d >= 12) return base + 'ン';
+  if(d >= 9)  return base + 'ッ';
+  return base;
+}
+function chantText(x, y, t){
+  return `<text x="${x}" y="${y+19}" font-size="10.5" fill="currentColor" fill-opacity=".62" text-anchor="middle">${t}</text>`;
+}
+
+/* 音符: 2分以上は白抜き、全音符は符幹なし、付点は右に */
+function drawNote(x, y, d, withFlag){
+  const hollow = d >= 24;
+  const dotted = (d===36 || d===18 || d===9);
+  let out = hollow
+    ? `<ellipse cx="${x}" cy="${y}" rx="${SC.HEADR+1.5}" ry="${SC.HEADR-0.4}" fill="none" stroke="currentColor" stroke-width="1.7" transform="rotate(-16 ${x} ${y})"/>`
+    : head(x,y);
+  if(d < 48) out += stem(x,y);
+  if(withFlag && d <= 6){
+    out += flag(x,y);
+    if(d <= 3) out += flag2(x,y);
+  }
+  if(dotted) out += `<circle cx="${x+SC.HEADR+4.2}" cy="${y-5.2}" r="1.6" fill="currentColor"/>`;
+  return out;
+}
+function flag2(x,y){
+  const sx = x+SC.HEADR-0.2, sy = y-SC.STEM+6.4;
+  return `<path d="M${sx} ${sy} q7 4 7.5 10 q0.4 4.5 -2.5 8 q2 -6 -1.5 -10 q-1.6 -2 -3.5 -3.2 z" fill="currentColor"/>`;
+}
+/* 休符: 全休符と2分休符は線に接する太い横棒、以下は字形 */
+function drawRest(x, y, d, bw){
+  const cx = x + Math.min(bw*0.28, 14);
+  if(d >= 48) return `<rect x="${cx-6}" y="${y-0.5}" width="12" height="4.6" fill="currentColor"/>`;
+  if(d >= 24) return `<rect x="${cx-6}" y="${y-4.6}" width="12" height="4.6" fill="currentColor"/>`;
+  if(d >= 12) return qrest(cx, y);
+  if(d >= 6)  return erest(cx, y);
+  return srest(cx, y);
+}
+function srest(x,y){
+  return `<g fill="currentColor">`
+    + `<path d="M${x+2.2} ${y-8.2} l2.5 -0.4 l-5.0 15.0 l-2.2 -0.5 z"/>`
+    + `<circle cx="${x-1.2}" cy="${y-5.6}" r="2.7"/>`
+    + `<circle cx="${x-2.6}" cy="${y+0.6}" r="2.7"/>`
+    + `</g>`;
+}
+</script>
+
+<script>
+'use strict';
+/* ================= アプリ本体 ================= */
+const $ = s => document.querySelector(s);
+const el = {
+  score:$('#score'), reps:$('#repsLabel'), big:$('#bigText'), hitote:$('#hitote'),
+  streak:$('#streak'), padL:$('#padL'), padBeat:$('#padBeat'),
+  main:$('#btnMain'), detail:$('#btnDetail'),
+  beatdots:$('#beatdots'),
+  timeline:$('#timeline'), detTable:$('#detTable'), detWarn:$('#detWarn')
+};
+
+const CONDNAME = {all:'全部鳴る', down:'1拍目だけ', half:'途中で消える', none:'最初だけ'};
+
+const S = {
+  bars:1, cells:['q'], cond:'all', bpm:80, goal:1, age:'b', tapSound:true, call:false, fixed:null, saved:[],
+  level:1, cleared:[], ev:null, fixedEv:null, syncope:false, watch:null, demoT0:null, cin2T0:null,
+  calib:null,                 // 校正のオフセット(秒)。null=未校正
+  phase:'idle',               // idle|countin|play|result|calib
+  measures:null, expected:[], reps:1,
+  t0:0, taps:[], results:[], history:[]
+};
+
+/* ---------- 保存 ---------- */
+function save(){
+  try{ localStorage.setItem('tantaka', JSON.stringify({
+    bars:S.bars, cond:S.cond, bpm:S.bpm, goal:S.goal, level:S.level, cleared:S.cleared, call:S.call, saved:S.saved,
+    age:S.age, tapSound:S.tapSound, calib:S.calib, syncope:S.syncope, history:S.history.slice(-200)
+  })); }catch(e){}
+}
+/* 保存データはそのまま流し込まない。壊れた値が1つあるだけで
+   起動時に例外が出て、全部のボタンが無反応になる（復旧手段が無くなる） */
+function load(){
+  let o=null;
+  try{ o = JSON.parse(localStorage.getItem('tantaka')||'null'); }catch(e){ return; }
+  if(!o || typeof o !== 'object') return;
+  const num = (v,lo,hi,def)=> (typeof v==='number' && isFinite(v) && v>=lo && v<=hi) ? v : def;
+  const oneOf = (v,arr,def)=> arr.includes(v) ? v : def;
+  S.bars     = oneOf(num(o.bars,1,4,1), [1,2,4], 1);
+  S.bpm      = num(o.bpm, 40, 200, 80);
+  S.goal     = oneOf(num(o.goal,1,3,1), [1,3], 1);
+  S.level    = num(o.level, 0, 99, 1);
+  S.cond     = oneOf(o.cond, ['all','down','half','none'], 'all');
+  S.age      = oneOf(o.age, ['a','b','c'], 'b');
+  S.call     = o.call === true;
+  S.syncope  = o.syncope === true;
+  S.tapSound = o.tapSound !== false;
+  S.calib    = (typeof o.calib==='number' && isFinite(o.calib) && Math.abs(o.calib)<1) ? o.calib : null;
+  S.cleared  = Array.isArray(o.cleared) ? o.cleared.filter(x=>typeof x==='number') : [];
+  S.history  = Array.isArray(o.history) ? o.history.slice(-200) : [];
+  S.saved    = (Array.isArray(o.saved) ? o.saved : []).filter(it=>
+      it && [1,2,4].includes(it.bars) && Array.isArray(it.cells)
+      && it.cells.length === it.bars*4 && it.cells.every(isCell)
+    ).map(it=>({bars:it.bars, cells:it.cells.slice(),
+      ties: Array.isArray(it.ties) && it.ties.length===it.cells.length ? it.ties.map(Boolean) : it.cells.map(()=>false)
+    })).slice(0,12);
+}
+
+/* 繰り返しはしない。書いてあるものを1回叩く。
+   走り／もたりは打点が足りなければ測れないので、そのときは正直に「測れない」と出す。
+   （統計の都合で子どもに何度も繰り返させるのは順序が逆） */
+
+/* ---------- 画面の更新 ---------- */
+function drawScore(){
+  const g = renderEvents(S.ev, {meter:true, chant:true});
+  el.score.setAttribute('viewBox', g.viewBox);
+  el.score.innerHTML = g.svg;
+  el.score.style.color = 'var(--note)';
+  S.marks = g.marks;
+  el.reps.textContent = '';
+}
+function setStreak(){
+  if(S.goal===1){ el.streak.hidden = true; return; }
+  el.streak.hidden = false;
+  const got = S.results.filter(Boolean).length;
+  el.streak.innerHTML = [0,1,2].map(i=> `<i class="${i<got?'on':''}"></i>`).join('');
+}
+/* 何拍目かは常に出す（本人の指定）。
+   クリックを消す条件では、数字を薄くして「これは頼るものではない」と示すだけにする。 */
+function updateBeatDots(){
+  const soft = !(S.cond==='all' || S.cond==='down');
+  [...el.beatdots.children].forEach(x=> x.classList.toggle('dim', soft));
+}
+function setBeatDot(n){
+  /* クリックを消す条件は「自分でテンポを保てるか」を測っている。
+     ここで画面が拍を教えると、先生の声への依存が画面への依存に変わるだけになる。
+     だから薄くするのではなく、本当に消す。 */
+  const soft = !(S.cond==='all' || S.cond==='down');
+  [...el.beatdots.children].forEach((x,i)=> x.classList.toggle('on', !soft && i===n));
+  if(el.padBeat){
+    if(soft || n<0){ el.padBeat.textContent='♪'; el.padBeat.className='idle'; }
+    else { el.padBeat.textContent=String(n+1); el.padBeat.className=''; }
+  }
+}
+
+/* 口唱歌。拍ごとの読みを並べる。タイで繋がった拍は叩かないので「ー」で伸ばす。
+   ラベルは表示用であって、判定には一切使わない */
+function chantOf(){
+  if(!S.ev) return '';
+  const nm = d => d>=48?'ター(4拍)':d>=36?'ター(3拍)':d>=24?'ター(2拍)':d>=18?'ター(1拍半)'
+                 :d>=12?'タン':d>=9?'ターン':d>=6?'タ':'カ';
+  let t=0; const out=[];
+  S.ev.forEach(e=>{
+    out.push(e.rest ? 'ウン' : (e.tie ? 'ー' : nm(e.d)));
+    t+=e.d;
+  });
+  return out.join(' ');
+}
+
+/* ---------- 拍 → 秒 ---------- */
+const spb = () => 60 / S.bpm;
+
+/* ---------- 出題 ---------- */
+function newQuestion(){
+  if(S.fixedEv){
+    S.ev = S.fixedEv.map(e=>Object.assign({},e));       // 自作・リンクの問題はそのまま
+  } else {
+    const cells = generate(S.bars, S.cells.length?S.cells:['q']);
+    const ties  = makeTies(cells.flat(), S.syncope ? 0.34 : 0, barsPerRowFor(S.bars));
+    S.ev = cellsToEvents(cells.flat(), ties);           // 生成結果もイベント列へ移す
+  }
+  S.expected = evOnsets(S.ev);
+  S.reps = 1;
+  S.taps = [];
+  S.phase = 'idle';          // これを戻さないと、次に「スタート」を押しても
+                             // 「次の問題」として扱われ、永久に始まらない
+  if(S.watch){ clearInterval(S.watch); S.watch=null; }
+  if(S.raf){ cancelAnimationFrame(S.raf); S.raf=null; }
+  Audio_.clear();
+  drawScore(); setStreak(); updateBeatDots(); setBeatDot(-1);
+  el.big.className = 'big'; el.big.textContent = '準備';
+  el.hitote.textContent = '';
+  el.detail.hidden = true;
+  el.main.textContent = 'スタート';
+  el.padL.classList.remove('dead');
+}
+
+/* ---------- クリックを鳴らす条件 ---------- */
+function metronomeEvents(startT){
+  const total = S.bars*4*S.reps, ev=[];
+  for(let b=0; b<total; b++){
+    const isDown = (b % 4)===0;
+    const half = b >= total/2;
+    let on = false;
+    if(S.cond==='all') on = true;
+    else if(S.cond==='down') on = isDown;
+    else if(S.cond==='half') on = !half;
+    else if(S.cond==='none') on = false;
+    if(on) ev.push({t: startT + b*spb(), type: isDown?'down':'beat'});
+  }
+  return ev;
+}
+
+/* ---------- 開始 ----------
+   表示の切り替えは setTimeout ではなく、毎フレーム音の時計を見て決める。
+   （画面更新は採点の基準には使わない。使うのは表示の切り替えだけ） */
+async function start(){
+  await Audio_.ensure();
+  Audio_.clear();
+  S.taps = [];
+  S.phase = 'countin';
+  el.padL.classList.remove('dead');
+  el.main.textContent = 'やめる';
+  el.detail.hidden = true;
+  el.big.className = 'big count';
+  el.hitote.textContent = '';
+  el.score.querySelectorAll('.hitmark').forEach(x=>x.remove());
+
+  const beat = spb();
+  const barBeats = S.bars*4;
+  const cin = 4;                                    // カウントは1小節ぶん
+  S.cinT0 = Audio_.now() + 0.3;
+  const ev = [];
+  const addCount = t0 => { for(let i=0;i<cin;i++) ev.push({t:t0+i*beat, type:i===0?'down':'beat'}); };
+
+  addCount(S.cinT0);
+  if(S.call){
+    /* お手本あり: カウント → お手本 → カウント → あなた */
+    S.demoT0 = S.cinT0 + cin*beat;
+    metronomeEvents(S.demoT0).forEach(e=> ev.push(e));
+    S.expected.forEach(b=> ev.push({t: S.demoT0 + b*beat, type:'model'}));
+    S.cin2T0 = S.demoT0 + barBeats*beat;
+    addCount(S.cin2T0);
+    S.t0 = S.cin2T0 + cin*beat;
+  } else {
+    /* お手本なし: カウント → あなた */
+    S.demoT0 = null; S.cin2T0 = null;
+    S.t0 = S.cinT0 + cin*beat;
+  }
+  S.endT = S.t0 + barBeats*beat + 0.75;
+  metronomeEvents(S.t0).forEach(e=> ev.push(e));
+  Audio_.schedule(ev);
+  startLoop();
+}
+function startLoop(){
+  if(S.raf) cancelAnimationFrame(S.raf);
+  /* rAF は画面が裏に回ると止まるが、音は鳴り続ける。
+     rAF だけで進行を判定すると、音が鳴り終わっても画面が凍ったままになる。
+     進行の締切だけは、画面に依存しないタイマーで見張る。 */
+  if(S.watch) clearInterval(S.watch);
+  S.watch = setInterval(()=>{
+    if(S.phase!=='countin' && S.phase!=='play'){ clearInterval(S.watch); S.watch=null; return; }
+    if(Audio_.now() >= S.endT + 0.4){
+      clearInterval(S.watch); S.watch=null;
+      if(document.hidden){
+        // 画面が裏に回っていた＝試行として成立していない
+        stopAll();
+        el.big.className='big'; el.big.textContent='やり直し';
+        el.hitote.textContent='途中で画面が変わったようです。初めから';
+      } else {
+        finish();          // 一度も叩かなかった場合も、そう判定する
+      }
+    }
+  }, 120);
+  const step = ()=>{
+    if(S.phase!=='countin' && S.phase!=='play'){ S.raf=null; return; }
+    const t = Audio_.now(), beat = spb();
+    if(S.phase==='countin'){
+      if(t >= S.t0){
+        S.phase='play';
+        el.big.className='big'; el.big.textContent='あなた';
+        el.hitote.textContent='';
+      } else if(S.cin2T0 !== null && S.cin2T0 !== undefined && t >= S.cin2T0){
+        const n = Math.max(0, Math.floor((t - S.cin2T0)/beat));
+        const v = String(Math.max(1, 4-n));
+        if(el.big.textContent !== v){ el.big.className='big count'; el.big.textContent = v; }
+        el.hitote.textContent = '次 あなた';
+        setBeatDot(-1);
+      } else if(S.demoT0 !== null && S.demoT0 !== undefined && t >= S.demoT0){
+        if(el.big.textContent!=='お手本'){
+          el.big.className='big'; el.big.textContent='お手本';
+          el.hitote.textContent = '譜面の下の読みを声に出して';
+        }
+        const b = Math.floor((t - S.demoT0)/beat);
+        setBeatDot(b>=0 ? (b % 4) : -1);
+      } else {
+        const n = Math.max(0, Math.floor((t - S.cinT0)/beat));
+        const v = String(Math.max(1, 4-n));
+        if(el.big.textContent !== v){ el.big.className='big count'; el.big.textContent = v; }
+        if(!el.hitote.textContent) el.hitote.textContent = S.call ? '次 お手本' : '次 あなた';
+      }
+    } else if(S.phase==='play'){
+      const b = Math.floor((t - S.t0)/beat);
+      setBeatDot(b>=0 ? (b % 4) : -1);
+      if(t >= S.endT){ finish(); return; }
+    }
+    S.raf = requestAnimationFrame(step);
+  };
+  S.raf = requestAnimationFrame(step);
+}
+
+function stopAll(){
+  Audio_.clear();
+  if(S.raf){ cancelAnimationFrame(S.raf); S.raf=null; }
+  if(S.watch){ clearInterval(S.watch); S.watch=null; }
+  S.phase='idle';
+  el.big.className='big'; el.big.textContent='準備';
+  el.hitote.textContent='';
+  el.main.textContent='スタート';
+  el.padL.classList.remove('dead');
+  setBeatDot(-1);
+}
+
+/* ---------- 入力 ---------- */
+function onTap(ev, pad){
+  if(ev.isPrimary === false) return;      // 最初の指だけ
+  if(pad){
+    const r = pad.getBoundingClientRect();
+    const rip = document.createElement('div');
+    rip.className='ripple';
+    rip.style.left=(ev.clientX-r.left)+'px'; rip.style.top=(ev.clientY-r.top)+'px';
+    pad.appendChild(rip); setTimeout(()=>rip.remove(), 460);
+  }
+  if(S.phase==='calib'){ calibTap(); return; }
+  if(S.phase!=='play') return;
+  const t = Audio_.now();
+  S.taps.push(t);
+  if(S.tapSound) Audio_.click(t + 0.005, 'tap');
+  markHit(t);
+}
+/* 叩いた「事実」だけを譜面の下に出す。正誤の色はここでは付けない
+   （叩いている最中に評価を出すと、注意が判定へ向いてリズムが崩れる） */
+function markHit(t){
+  if(!S.beatX || !S.beatX.length) return;
+  const beat = spb();
+  const pos = (t - S.t0)/beat;                    // 拍単位
+  const inBar = pos % (S.bars*4);
+  let best=null, bd=1e9;
+  S.beatX.forEach(m=>{ const d=Math.abs(m.beat - Math.round(inBar*2)/2); if(d<bd){bd=d; best=m;} });
+  if(!best || bd>0.75) return;
+  const ns='http://www.w3.org/2000/svg';
+  const c=document.createElementNS(ns,'circle');
+  c.setAttribute('cx', best.x + 14); c.setAttribute('cy', best.y + 20);
+  c.setAttribute('r', 3.2); c.setAttribute('fill','currentColor'); c.setAttribute('opacity','.45');
+  c.setAttribute('class','hitmark');
+  el.score.appendChild(c);
+}
+
+/* ---------- 判定 ---------- */
+function finish(){
+  S.phase='result';
+  Audio_.clear();
+  el.padL.classList.add('dead');
+  el.main.textContent='次の問題';
+  setBeatDot(-1);
+
+  const beat = spb();
+  const exp = S.expected.map(b => S.t0 + b*beat);
+  const cal = S.calib || 0;
+  const act = S.taps.map(t => t - cal);
+
+  // 判定窓: 合法な拍内位置の最小間隔 = 8分音符
+  const d = beat/2;
+  const prof = AGE[S.age];
+  const W = windowFor(d, prof);
+  let res = align(exp, act, W*2.2);
+
+  /* テンポが動いただけなら「抜け・余分」ではない。
+     打点の数が合っているのに対応が切れた場合、順番どおりの対応で
+     テンポの傾きとして説明できるかを確かめる。説明できるなら形は合っている。 */
+  let tempoDrift = false;
+  if(act.length === exp.length && (res.missed.length || res.extra.length)){
+    const d1 = act.map((t,i)=> t-exp[i]);
+    const x1 = exp.map(t=> t-S.t0);
+    const s1 = slope(x1, d1);
+    if(s1 !== null){
+      const p1 = median(d1);
+      const m1 = x1.reduce((a,b)=>a+b,0)/x1.length;
+      const r1 = d1.map((v,k)=> v - (p1 + s1*(x1[k]-m1)));
+      if(mad(r1) <= W){
+        res = {pairs: exp.map((_,i)=>[i,i]), missed:[], extra:[]};
+        tempoDrift = true;
+      }
+    }
+  }
+
+  const diffs = res.pairs.map(([i,j]) => act[j]-exp[i]);
+  const xs = res.pairs.map(([i]) => exp[i]-S.t0);
+  /* 位相は「拍の頭にある打点」だけから取る。
+     全打点の中央値にすると、拍の中の崩れ（タッカが3連に化ける等）が
+     位相へ吸われて半分に折り返され、崩れが窓の内側に収まって合格してしまう。
+     拍頭は機材の遅れを測るための基準点であって、崩れが出る場所ではない。 */
+  const onDown = res.pairs.map(([i]) => Math.abs(S.expected[i] - Math.round(S.expected[i])) < 1e-6);
+  const downDiffs = diffs.filter((_,k)=> onDown[k]);
+  const phase = downDiffs.length >= 2 ? median(downDiffs) : median(diffs);
+  const sl = slope(xs, diffs);              // 秒/秒
+  // 傾きを除いた残差
+  const mx = xs.length? xs.reduce((a,b)=>a+b,0)/xs.length : 0;
+  const resid = diffs.map((v,k)=> sl===null ? v-phase : v - (phase + sl*(xs[k]-mx)));
+  const spread = mad(resid);
+
+  // 1拍まるごとずらす補正は禁止（位相が8分音符の半分を超えたら補正しない）
+  const phaseCap = d*0.5;
+  const usePhase = Math.abs(phase) <= phaseCap ? phase : 0;
+  const bigPhase = Math.abs(phase) > phaseCap;
+
+  const outside = diffs.filter(v => Math.abs(v-usePhase) > W);
+  const structOK = res.missed.length===0 && res.extra.length===0;
+  const ok = structOK && outside.length===0 && !bigPhase;
+
+  S.results.push(ok);
+  S.history.push({ts:Date.now(), ok, bars:S.bars, bpm:S.bpm, cond:S.cond,
+    miss:res.missed.length, extra:res.extra.length,
+    phase:Math.round(phase*1000), slope: sl===null?null:Math.round(sl*1000*10)/10,
+    mad:Math.round(spread*1000)});
+  save();
+
+  // ---- 子どもへは「ひとこと」だけ ----
+  // 優先: 構造 → 位相 → 傾き → ばらつき
+  let word = '';
+  if(act.length === 0){
+    word = '叩けなかった。もう一度';
+  } else if(res.missed.length){
+    // 通し番号で言われても譜面のどこか分からない。何回目の何拍目かで言う
+    const b = S.expected[res.missed[0]];
+    const barBeats = S.bars*4;
+    const nth = Math.floor(b % 4) + 1;
+    const bar = Math.floor(b / 4) + 1;
+    const ura = (b % 1) >= 0.25;
+    word = (S.bars>1 ? `${bar}小節目の ` : '') + `${nth}拍目${ura?'の裏':''}の音が抜けた`;
+  } else if(res.extra.length){
+    word = `余分に ${res.extra.length}回叩いた`;
+  } else if(sl!==null && Math.abs(sl) > 0.012 && Math.abs(sl)*xs[xs.length-1] > W*0.8){
+    // テンポが動いている場合を先に見る。これを後に置くと、もたりが
+    // 「はじまりが大きくおくれた」と誤って報告される
+    const strong = tempoDrift || Math.abs(sl) > 0.030;
+    word = sl>0
+      ? (strong ? '後半で遅くなった' : '後半で少し遅くなった')
+      : (strong ? '後半で早くなった' : '後半で少し早くなった');
+  } else if(bigPhase){
+    word = phase>0 ? '始まりが大きく遅れた' : '始まりが大きく早かった';
+  } else if(sl!==null && Math.abs(sl) > 0.012){
+    const strong = tempoDrift || Math.abs(sl) > 0.030;
+    word = sl>0
+      ? (strong ? '後半で遅くなった' : '後半で少し遅くなった')
+      : (strong ? '後半で早くなった' : '後半で少し早くなった');
+  } else if(outside.length){
+    // いちばん外れた1点だけ言う
+    let worst=0, wi=0;
+    diffs.forEach((v,k)=>{ const e=Math.abs(v-usePhase); if(e>worst){worst=e; wi=k;} });
+    const bp = S.expected[res.pairs[wi][0]];
+    const nth = Math.floor(bp % 4)+1;
+    const bar = Math.floor(bp / 4)+1;
+    const ura = (bp % 1) >= 0.25;
+    word = (S.bars>1 ? `${bar}小節目の ` : '') + `${nth}拍目${ura?'の裏':''}が ${diffs[wi]-usePhase>0?'遅かった':'早かった'}`;
+  } else if(spread > W*0.55){
+    word = '揃ってきた。少しばらつきがある';
+  } else {
+    word = ok ? 'ぴったり' : '惜しい';
+  }
+
+  el.big.className = 'big ' + (ok?'ok':'ng');
+  el.big.textContent = ok ? 'できた' : 'もう一度';
+  el.hitote.textContent = word;
+  el.detail.hidden = false;
+  setStreak();
+  if(ok) Audio_.click(Audio_.now()+0.02, 'ok');
+
+  // 目標の達成（3もんモードは直近3問中2問）
+  let cleared = false;
+  if(S.goal===1) cleared = ok;
+  else cleared = S.results.filter(Boolean).length >= 3;   // 通算3回。連続でなくてよい
+  if(cleared){
+    el.big.textContent = 'クリア';
+    el.big.className='big ok';
+    if(!S.cleared.includes(S.level)) S.cleared.push(S.level);
+    save();
+    S.results = [];
+  }
+
+  // ---- くわしく ----
+  const fmt = (v,u)=> (v===null||v===undefined) ? '—' : (Math.round(v*10)/10)+u;
+  const span = Math.max(...exp, ...act) - S.t0 + 0.3;
+  el.timeline.setAttribute('viewBox','0 0 360 222');
+  el.timeline.innerHTML = renderTimeline(exp.map(t=>t-S.t0), act.map(t=>t-S.t0),
+      res.pairs, res.missed, res.extra, span, {window:W, phase:usePhase});
+  el.detTable.innerHTML = `
+    <tr><th>構造</th><td>${structOK?('合っている'+(tempoDrift?'（テンポの流れとして解釈）':'')):`ぬけ ${res.missed.length} ／ よぶん ${res.extra.length}`}</td></tr>
+    <tr><th>位相（始まりのずれ）</th><td>${fmt(phase*1000,'ms')}${bigPhase?' <span style="color:#ffb454">※大きすぎるので補正しない</span>':''}</td></tr>
+    <tr><th>走り／もたり（傾き）</th><td>${sl===null?'測れない（打点が足りない）':fmt(sl*1000,' ms/秒')}</td></tr>
+    <tr><th>ばらつき（MAD）</th><td>${fmt(spread*1000,'ms')}</td></tr>
+    <tr><th>判定のはば</th><td>±${fmt(W*1000,'ms')}（${prof.name}・8分=${fmt(d*1000,'ms')}）</td></tr>
+    <tr><th>打点の数</th><td>正解 ${exp.length} ／ たたいた ${act.length}</td></tr>
+    <tr><th>校正</th><td>${S.calib===null?'していない（生の値で判定）':fmt(S.calib*1000,'ms を引いた')}</td></tr>`;
+
+  // その条件では判定してはいけない場合の警告
+  let warn = '';
+  if(0.40*d < prof.F){
+    warn = `このはやさの音のこまかさ（8分=${Math.round(d*1000)}ms）に対して、${prof.name}の下限（±${Math.round(prof.F*1000)}ms）のほうが広い。<b>この条件では位置を正しく判定できない</b>。テンポを下げるか、練習だけに使う。`;
+  } else if(sl===null){
+    warn = '打点が少ないので、走り／もたりは測れない。小節数を増やすか、くりかえしを増やすと出る。';
+  }
+  el.detWarn.innerHTML = warn ? `<div class="warnbox">${warn}</div>` : '';
+}
+</script>
+
+<script>
+'use strict';
+/* ================= レベルと配線 ================= */
+/* 音価の導入順に並べる。16分と付点は、うら入り・シンコペーションより前に来る
+   （うら拍入りと切分を先に置くのは、どの指導体系の順序とも合わない） */
+const LEVELS = [
+  {n:1, cells:['q'],                          d:'4分音符だけ'},
+  {n:2, cells:['q','qr'],                     d:'4分音符と休符'},
+  {n:3, cells:['q','ee'],                     d:'8分音符2つ'},
+  {n:4, cells:['q','ee','qr'],                d:'8分音符と休符'},
+  {n:5, cells:['q','ee','ss'],                d:'16分音符4つ'},
+  {n:6, cells:['q','ee','ss','es','se'],      d:'8分と16分の混ざり'},
+  {n:7, cells:['q','ee','dt'],                d:'タッカ（付点8分＋16分）'},
+  {n:8, cells:['q','ee','qr','re'],           d:'裏から入る'},
+  {n:9, cells:['q','ee','ss','dt','qr','re'], d:'全部'}
+];
+const BPMS = [60, 80, 100, 120, 140];
+
+
+/* ================= 自分でつくるモード =================
+   音符を1個ずつ置いていく。拍で閉じないので、2分音符も全音符も、
+   拍をまたぐ音も書ける。内部は音価つきのイベント列。 */
+const PAL_N = ['w','h','qd','q','ed','e','s'];
+const PAL_R = ['h','q','e','s'];
+const M = {ev:[], bars:1};
+
+function mkCap(){ return M.bars*48; }
+function mkDraw(){
+  const g = renderEvents(M.ev.length?M.ev:[{d:48, rest:true}], {meter:true, chant:true});
+  const sc = $('#mkScore');
+  sc.setAttribute('viewBox', g.viewBox); sc.innerHTML = g.svg; sc.style.color='var(--note)';
+  const used = evTotal(M.ev), cap = mkCap();
+  const left = cap - used;
+  $('#mkHint').textContent = left > 0
+    ? `残り ${(left/12).toFixed(left%12?2:0)} 拍`
+    : (left === 0 ? 'ちょうど埋まった' : 'いっぱいです');
+  const last = M.ev[M.ev.length-1];
+  const prev = M.ev[M.ev.length-2];
+  const tieOK = !!(last && !last.rest && prev && !prev.rest);
+  $('#mkTie').disabled = !tieOK;
+  $('#mkTie').style.opacity = tieOK ? '1' : '.35';
+  $('#mkTie').setAttribute('aria-pressed', String(!!(last && last.tie)));
+  $('#mkUndo').disabled = !M.ev.length;
+  $('#mkUndo').style.opacity = M.ev.length ? '1' : '.35';
+  $('#mkPlay').style.opacity = M.ev.some(e=>!e.rest) ? '1' : '.4';
+}
+function mkPalette(){
+  const cell = (id, rest)=>{
+    // その音価ぶんだけの短い譜にする（1音符に1小節ぶんの線が引かれると読めない）
+    const g = renderEvents([{d:DUR[id].d, rest:rest}], {barTicks:DUR[id].d, bare:true});
+    return `<button data-d="${id}" data-r="${rest?1:0}">`
+      + `<svg viewBox="12 8 62 54" preserveAspectRatio="xMidYMid meet">${g.svg}</svg>`
+      + `<span>${rest? '休符' : DUR[id].name.replace('音符','')}<br><b style="color:var(--ink2); font-weight:600">${DUR[id].beats}</b></span></button>`;
+  };
+  $('#mkPalNote').innerHTML = PAL_N.map(id=>cell(id,false)).join('')
+                            + PAL_R.map(id=>cell(id,true)).join('');
+}
+function mkAdd(id, rest){
+  const d = DUR[id].d;
+  if(evTotal(M.ev) + d > mkCap()) return;         // 小節からあふれるものは置かせない
+  M.ev.push({d:d, rest:rest, tie:false});
+  mkDraw();
+}
+function enterMake(preset){
+  document.body.classList.remove('playing');
+  document.body.classList.add('making');
+  $('#btnBack').hidden = false; $('#btnSet').hidden = true; $('#playTopRight').hidden = true;
+  $('#barsRow').style.display = '';
+  if(preset){ M.bars = preset.bars; M.ev = preset.ev.map(e=>Object.assign({},e)); }
+  M.bars = S.bars;
+  if(evTotal(M.ev) > mkCap()) M.ev = [];
+  mkPalette(); mkDraw();
+}
+function exitMake(){
+  document.body.classList.remove('making');
+  $('#btnBack').hidden = true; $('#btnSet').hidden = false;
+  buildLevels();
+}
+/* リンク: イベント列そのものを入れる（生成の種は入れない） */
+function evCode(ev){ return ev.map(e=> (e.rest?'r':'n') + e.d + (e.tie?'t':'')).join('.'); }
+function evParse(str){
+  const out=[];
+  for(const p of String(str).split('.')){
+    const m = p.match(/^([nr])(\d{1,2})(t?)$/); if(!m) return null;
+    const d = Number(m[2]); if(!(d>0 && d<=48)) return null;
+    out.push({d:d, rest:m[1]==='r', tie:m[3]==='t'});
+  }
+  return out.length ? out : null;
+}
+function makeLink(){
+  const code = 'v3.' + M.bars + '.' + evCode(M.ev);
+  return location.origin + location.pathname + '#' + encodeURIComponent(code);
+}
+function readLink(){
+  const h = decodeURIComponent(location.hash.replace(/^#/,''));
+  const m = h.match(/^v3\.(\d)\.(.+)$/);
+  if(!m) return null;
+  const bars = Number(m[1]); const ev = evParse(m[2]);
+  if(!ev || ![1,2,4].includes(bars) || evTotal(ev) > bars*48) return null;
+  return {bars, ev};
+}
+
+/* --- ホームのレベル一覧 --- */
+function buildLevels(){
+  const box = $('#levels');
+  const mine = (S.saved||[]).map((it,i)=>{
+    const g = renderEvents(it.ev, {});
+    return `<button class="lv" data-mine="${i}">
+      <div class="h"><div class="n">自作 ${i+1}</div><div class="d">${it.bars}しょうせつ</div></div>
+      <div class="ex" style="color:var(--accent)"><svg viewBox="${g.viewBox}">${g.svg}</svg></div>
+    </button>`;
+  }).join('');
+  const makeCard = `<button class="lv" data-make="1" style="background:var(--accent-soft)">
+      <div class="h"><div class="n">＋ 自分で作る</div><div class="d">曲の中の難しいリズムを入れる</div></div>
+    </button>`;
+  box.innerHTML = makeCard + mine + LEVELS.map(L=>{
+    let demo = L.cells.slice(0,4);                 // 使うセルを1拍ずつ並べた見本
+    if(demo.length===1) demo = [demo[0], demo[0]];
+    const g = renderScore([demo], {cols:demo.length});
+    const done = (S.cleared||[]).includes(L.n) ? '<div class="done">できた</div>' : '';
+    return `<button class="lv" data-lv="${L.n}">
+      <div class="h"><div class="n">レベル ${L.n}</div><div class="d">${L.d}</div>${done}</div>
+      <div class="ex" style="color:var(--accent)"><svg viewBox="${g.viewBox}">${g.svg}</svg></div>
+    </button>`;
+  }).join('');
+  box.onclick = e=>{
+    const b = e.target.closest('.lv'); if(!b) return;
+    if(b.dataset.make){ enterMake(); return; }
+    if(b.dataset.mine !== undefined){
+      const it = S.saved[Number(b.dataset.mine)];
+      S.bars = it.bars; enterPlayEv(it.ev, it.bars); return;
+    }
+    enterPlay(Number(b.dataset.lv));
+  };
+}
+
+/* --- BPM ピル --- */
+function buildBpms(){
+  $('#bpms').innerHTML = BPMS.map(v=>`<button data-v="${v}" aria-pressed="${v===S.bpm}">${v}</button>`).join('');
+  $('#bpms').addEventListener('click', e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    S.bpm = Number(b.dataset.v);
+    [...$('#bpms').children].forEach(x=> x.setAttribute('aria-pressed', String(Number(x.dataset.v)===S.bpm)));
+    save();
+    if(S.phase==='idle' && document.body.classList.contains('playing')) newQuestion();
+  });
+}
+
+/* --- 画面の出入り --- */
+function enterPlay(lv){
+  S.fixedEv = null;
+  S.level = lv;
+  S.cells = LEVELS.find(L=>L.n===lv).cells;
+  S.results = [];
+  document.body.classList.add('playing');
+  $('#btnBack').hidden = false;
+  $('#btnSet').hidden = true;
+  $('#playTopRight').hidden = false;
+  $('#btnCall').setAttribute('aria-pressed', String(S.call));
+  $('#bpmRow').style.display = '';
+  $('#barsRow').style.display = 'none';
+  newQuestion();
+}
+/* 自作・共有リンクの問題で練習に入る（毎回おなじ問題が出る） */
+function enterPlayEv(ev, bars){
+  S.fixedEv = ev.map(e=>Object.assign({},e));
+  S.bars = bars; S.level = 0; S.results = [];
+  document.body.classList.remove('making');
+  document.body.classList.add('playing');
+  $('#btnBack').hidden = false; $('#btnSet').hidden = true; $('#playTopRight').hidden = false;
+  $('#barsRow').style.display = 'none';
+  newQuestion();
+}
+function exitPlay(){
+  S.fixedEv = null;
+  stopAll();
+  document.body.classList.remove('playing');
+  $('#btnBack').hidden = true;
+  $('#btnSet').hidden = false;
+  $('#playTopRight').hidden = true;
+  $('#barsRow').style.display = '';
+  buildLevels();
+}
+
+/* --- お手本 --- */
+async function playModel(){
+  if(S.phase!=='idle' && S.phase!=='result') return;
+  await Audio_.ensure(); Audio_.clear();
+  const beat = spb(), t0 = Audio_.now()+0.25;
+  const ev=[]; for(let i=0;i<4;i++) ev.push({t:t0+i*beat, type:i===0?'down':'beat'});
+  const s0 = t0 + 4*beat;
+  metronomeEvents(s0).forEach(e=>ev.push(e));
+  S.expected.forEach(b=> ev.push({t: s0 + b*beat, type:'model'}));
+  Audio_.schedule(ev);
+  el.big.className='big'; el.big.textContent='聴いて';
+  el.hitote.textContent = '譜面の下の読みを声に出して';
+  const endT = s0 + (S.bars*4)*beat + 0.4;
+  const back = ()=>{
+    if(S.phase!=='idle' && S.phase!=='result') return;
+    if(Audio_.now() >= endT){
+      el.big.textContent = S.phase==='result' ? 'もう一度' : '準備';
+      return;
+    }
+    requestAnimationFrame(back);
+  };
+  requestAnimationFrame(back);
+}
+
+/* --- 校正（任意・20打点） --- */
+let calBuf=[], calT0=0, calRaf=null;
+async function startCalib(){
+  await Audio_.ensure(); Audio_.clear();
+  calBuf=[]; S.phase='calib';
+  closeSheet($('#sheetSet'));
+  if(!document.body.classList.contains('playing')) enterPlay(S.level||1);
+  el.big.className='big'; el.big.textContent='校正';
+  el.hitote.textContent='クリックに合わせて20回叩く';
+  el.main.textContent='やめる';
+  const beat=0.6; calT0 = Audio_.now()+0.6;
+  const ev=[]; for(let i=0;i<26;i++) ev.push({t:calT0+i*beat, type:i%4===0?'down':'beat'});
+  Audio_.schedule(ev);
+  const endT = calT0 + 26*beat;
+  const w=()=>{ if(S.phase!=='calib') return;
+    if(Audio_.now()>=endT){ endCalib(beat); return; }
+    calRaf=requestAnimationFrame(w); };
+  calRaf=requestAnimationFrame(w);
+}
+function calibTap(){
+  const t = Audio_.now();
+  calBuf.push(t);
+  if(S.tapSound) Audio_.click(t+0.005,'tap');
+  el.hitote.textContent = `残り ${Math.max(0, 20-calBuf.length)} 回`;
+  if(calBuf.length>=20) endCalib(0.6);
+}
+function endCalib(beat){
+  Audio_.clear(); if(calRaf) cancelAnimationFrame(calRaf);
+  S.phase='idle';
+  const ds = calBuf.map(t=>{ const n=Math.round((t-calT0)/beat); return t-(calT0+n*beat); })
+                   .filter(v=>Math.abs(v)<beat*0.45);
+  if(ds.length>=12){
+    S.calib = median(ds); S.calibMad = mad(ds);
+    el.big.className='big'; el.big.textContent='校正できた';
+    el.hitote.textContent = `ずれ ${Math.round(S.calib*1000)}ms ／ ばらつき ${Math.round(S.calibMad*1000)}ms`;
+  } else {
+    el.big.className='big'; el.big.textContent='校正できなかった';
+    el.hitote.textContent='もう一度、クリックに合わせて叩いてください';
+  }
+  save(); updateCalNote(); el.main.textContent='スタート';
+}
+function updateCalNote(){
+  const n=$('#noteCal');
+  if(S.calib===null||S.calib===undefined){
+    n.innerHTML='<b>していない。</b>校正しなくても遊べる（判定のたびに全体のずれは引いている）。イヤホンで「合っているのに落ちる」と感じたときに押す。';
+  } else {
+    n.innerHTML=`<b>済み: ${Math.round(S.calib*1000)}ms を引いている。</b>ここには機材の遅れと、あなた自身の先走りの両方が混ざっている。生の時刻は残してある。`;
+  }
+}
+
+/* --- シート --- */
+function openSheet(s){ s.classList.add('open'); }
+function closeSheet(s){ s.classList.remove('open'); }
+function bindSeg(sel, key, after, coerce){
+  const box=$(sel);
+  box.addEventListener('click', e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    S[key] = coerce ? coerce(b.dataset.v) : b.dataset.v;
+    [...box.children].forEach(x=> x.setAttribute('aria-pressed', String(String(S[key])===x.dataset.v || (coerce&&S[key]===coerce(x.dataset.v)))));
+    save(); if(after) after();
+  });
+}
+function syncSeg(sel, key){
+  [...$(sel).children].forEach(x=> x.setAttribute('aria-pressed', String(String(S[key])===x.dataset.v)));
+}
+
+/* --- 初期化 --- */
+function init(){
+  try{ boot(); }
+  catch(e){
+    // 起動に失敗しても操作不能にはしない。データを捨てて立ち上げ直せる出口を残す
+    document.body.innerHTML = '<div style="padding:28px 22px; font-family:-apple-system,sans-serif">'
+      + '<h2 style="margin:0 0 8px">うまく ひらけなかった</h2>'
+      + '<p style="color:#6b6773; font-size:14px; line-height:1.7">ほぞんされた データが こわれている みたいです。'
+      + 'したのボタンで まっさらに してから もういちど ひらいてください。</p>'
+      + '<button id="reset" style="margin-top:14px; min-height:48px; width:100%; border:0; border-radius:12px;'
+      + 'background:#9c1442; color:#fff; font-size:15px; font-weight:600">データを しょきかする</button>'
+      + '<p style="color:#9a96a3; font-size:11px; margin-top:16px">' + String(e && e.message || e) + '</p></div>';
+    document.getElementById('reset').onclick = ()=>{
+      try{ localStorage.removeItem('tantaka'); }catch(_){}
+      location.hash=''; location.reload();
+    };
+  }
+}
+function boot(){
+  load();
+  if(S.calib===undefined) S.calib=null;
+  if(!S.cleared) S.cleared=[];
+  buildBpms(); buildLevels();
+  syncSeg('#barsRow','bars'); syncSeg('#segCond','cond');
+  syncSeg('#segGoal','goal'); syncSeg('#segAge','age');
+  [...$('#segCall').children].forEach(x=> x.setAttribute('aria-pressed', String((x.dataset.v==='on')===S.call)));
+  [...$('#segSync').children].forEach(x=> x.setAttribute('aria-pressed', String((x.dataset.v==='on')===S.syncope)));
+  [...$('#segSound').children].forEach(x=> x.setAttribute('aria-pressed', String((x.dataset.v==='on')===S.tapSound)));
+  [...$('#segCall').children].forEach(x=> x.setAttribute('aria-pressed', String((x.dataset.v==='on')===S.call)));
+  [...$('#segSync').children].forEach(x=> x.setAttribute('aria-pressed', String((x.dataset.v==='on')===S.syncope)));
+
+  $('#barsRow').addEventListener('click', e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    S.bars=Number(b.dataset.v);
+    [...$('#barsRow').children].forEach(x=> x.setAttribute('aria-pressed', String(Number(x.dataset.v)===S.bars)));
+    save();
+  });
+  bindSeg('#segCond','cond', ()=>{ if(document.body.classList.contains('playing')) updateBeatDots(); });
+  bindSeg('#segGoal','goal', ()=>{ S.results=[]; setStreak(); }, v=>Number(v));
+  bindSeg('#segAge','age');
+  $('#segSync').addEventListener('click', e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    S.syncope = b.dataset.v==='on';
+    [...$('#segSync').children].forEach(x=> x.setAttribute('aria-pressed', String((x.dataset.v==='on')===S.syncope)));
+    save(); if(document.body.classList.contains('playing') && S.phase==='idle' && !S.fixed) newQuestion();
+  });
+  $('#segCall').addEventListener('click', e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    S.call = b.dataset.v==='on';
+    [...$('#segCall').children].forEach(x=> x.setAttribute('aria-pressed', String((x.dataset.v==='on')===S.call)));
+  [...$('#segSync').children].forEach(x=> x.setAttribute('aria-pressed', String((x.dataset.v==='on')===S.syncope)));
+    save();
+  });
+  $('#segSound').addEventListener('click', e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    S.tapSound = b.dataset.v==='on';
+    [...$('#segSound').children].forEach(x=> x.setAttribute('aria-pressed', String((x.dataset.v==='on')===S.tapSound)));
+    save();
+  });
+
+  $('#btnSet').addEventListener('click', ()=> openSheet($('#sheetSet')));
+  $('#closeSet').addEventListener('click', ()=> closeSheet($('#sheetSet')));
+  $('#closeDet').addEventListener('click', ()=> closeSheet($('#sheetDet')));
+  [$('#sheetSet'), $('#sheetDet')].forEach(s=> s.addEventListener('click', e=>{ if(e.target===s) closeSheet(s); }));
+  $('#btnCal').addEventListener('click', startCalib);
+  $('#btnBack').addEventListener('click', ()=>{
+    if(document.body.classList.contains('making')) exitMake(); else exitPlay();
+  });
+  $('#mkTie').addEventListener('click', ()=>{
+    const last=M.ev[M.ev.length-1], prev=M.ev[M.ev.length-2];
+    if(!last || last.rest || !prev || prev.rest) return;
+    last.tie = !last.tie; mkDraw();
+  });
+  $('#mkUndo').addEventListener('click', ()=>{ M.ev.pop(); mkDraw(); });
+  $('#mkPalNote').addEventListener('click', e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    mkAdd(b.dataset.d, b.dataset.r==='1');
+  });
+  $('#mkPlay').addEventListener('click', ()=>{
+    if(!M.ev.some(e=>!e.rest)) return;
+    S.saved = S.saved || [];
+    const code = M.bars + '.' + evCode(M.ev);
+    if(!S.saved.some(x=> x.bars+'.'+evCode(x.ev)===code)){
+      S.saved.unshift({bars:M.bars, ev:M.ev.map(e=>Object.assign({},e))});
+      S.saved = S.saved.slice(0,12); save();
+    }
+    enterPlayEv(M.ev, M.bars);
+  });
+  $('#mkShare').addEventListener('click', async ()=>{
+    const url = makeLink();
+    try{
+      if(navigator.share) await navigator.share({title:'タンタカのもんだい', url});
+      else { await navigator.clipboard.writeText(url); alert('リンクをコピーしました'); }
+    }catch(e){ prompt('このリンクを送る', url); }
+  });
+  $('#btnCall').addEventListener('click', ()=>{
+    S.call = !S.call;
+    $('#btnCall').setAttribute('aria-pressed', String(S.call));
+    [...$('#segCall').children].forEach(x=> x.setAttribute('aria-pressed', String((x.dataset.v==='on')===S.call)));
+    save();
+  });
+  el.detail.addEventListener('click', ()=> openSheet($('#sheetDet')));
+
+  el.main.addEventListener('click', async ()=>{
+    if(S.phase==='idle') await start();
+    else if(S.phase==='result') newQuestion();
+    else stopAll();
+  });
+
+  // 入力: 触れた瞬間だけ。左右どちらのパッドでもよい
+  const pad = $('#padL');
+  pad.addEventListener('pointerdown', e=>{ e.preventDefault(); onTap(e, pad); }, {passive:false});
+  pad.addEventListener('contextmenu', e=> e.preventDefault());
+  window.addEventListener('keydown', e=>{
+    if(e.code!=='Space' || e.repeat || e.isComposing) return;
+    e.preventDefault();
+    const p2=$('#padL'), r=p2.getBoundingClientRect();
+    onTap({clientX:r.left+r.width/2, clientY:r.top+r.height/2, isPrimary:true}, p2);
+  });
+
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.hidden && (S.phase==='play'||S.phase==='countin'||S.phase==='calib')){
+      stopAll();
+      el.big.className='big'; el.big.textContent='やり直し';
+      el.hitote.textContent='画面が切り替わったので、初めから';
+    }
+  });
+
+  updateCalNote();
+
+  const fromLink = readLink();
+  if(fromLink){ S.bars = fromLink.bars; enterPlayEv(fromLink.ev, fromLink.bars); }
+}
+init();
+</script>
+</body>
+</html>
