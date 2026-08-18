@@ -964,7 +964,7 @@ function renderEvents(ev, opts){
   const perRow = bars.length >= 3 ? 2 : bars.length || 1;
   const rows = Math.ceil(bars.length / perRow);
   const barw = (SC.W - padL - SC.PADX) / perRow;
-  const H = rows * SC.ROWH + (opts.chant ? 26 : 20);
+  const H = rows * SC.ROWH + (opts.chant ? 42 : 20);   // 口唱歌＋叩いた印のぶん
   let s = '';
   const marks = [];
 
@@ -1165,7 +1165,7 @@ const CONDNAME = {all:'全部鳴る', down:'1拍目だけ', half:'途中で消�
 
 const S = {
   bars:1, cells:['q'], cond:'all', bpm:80, goal:1, age:'b', tapSound:true, call:false, fixed:null, saved:[],
-  level:1, cleared:[], ev:null, fixedEv:null, syncope:false, watch:null, demoT0:null, cin2T0:null, meter:'4/4',
+  level:1, cleared:[], ev:null, fixedEv:null, syncope:false, watch:null, demoT0:null, cin2T0:null, meter:'4/4', saved:[],
   calib:null,                 // 校正のオフセット(秒)。null=未校正
   phase:'idle',               // idle|countin|play|result|calib
   measures:null, expected:[], reps:1,
@@ -1175,7 +1175,7 @@ const S = {
 /* ---------- 保存 ---------- */
 function save(){
   try{ localStorage.setItem('tantaka', JSON.stringify({
-    bars:S.bars, cond:S.cond, bpm:S.bpm, goal:S.goal, level:S.level, cleared:S.cleared, call:S.call, saved:S.saved, meter:S.meter,
+    bars:S.bars, cond:S.cond, bpm:S.bpm, goal:S.goal, level:S.level, cleared:S.cleared, call:S.call, meter:S.meter,
     age:S.age, tapSound:S.tapSound, calib:S.calib, syncope:S.syncope, history:S.history.slice(-200)
   })); }catch(e){}
 }
@@ -1200,12 +1200,7 @@ function load(){
   S.calib    = (typeof o.calib==='number' && isFinite(o.calib) && Math.abs(o.calib)<1) ? o.calib : null;
   S.cleared  = Array.isArray(o.cleared) ? o.cleared.filter(x=>typeof x==='number') : [];
   S.history  = Array.isArray(o.history) ? o.history.slice(-200) : [];
-  S.saved    = (Array.isArray(o.saved) ? o.saved : []).filter(it=>
-      it && [1,2,4].includes(it.bars) && Array.isArray(it.ev) && it.ev.length
-      && it.ev.every(e=> e && typeof e.d==='number' && e.d>0 && e.d<=96)
-    ).map(it=>({bars:it.bars, meter: (it.meter && METERS[it.meter]) ? it.meter : '4/4',
-      ev: it.ev.map(e=>({d:e.d, rest:!!e.rest, tie:!!e.tie}))
-    })).slice(0,12);
+  S.saved = [];        // 自作は保存しない（作ったらその場で練習し、送りたければリンク）
 }
 
 /* 繰り返しはしない。書いてあるものを1回叩く。
@@ -1472,7 +1467,7 @@ function markHit(t){
   g.setAttribute('class','hitmark');
   g.dataset.t = String(t);          // 叩いた時刻。結果の色付けで突き合わせる
   const c=document.createElementNS(ns,'circle');
-  c.setAttribute('cx', best.x + dx); c.setAttribute('cy', best.y - 21);
+  c.setAttribute('cx', best.x + dx); c.setAttribute('cy', best.y + 32);   // 口唱歌の少し下
   c.setAttribute('r', 4.2); c.setAttribute('fill','currentColor'); c.setAttribute('opacity','.42');
   g.appendChild(c);
   el.score.appendChild(g);
@@ -1512,7 +1507,7 @@ function paintHits(res, diffs, usePhase, W, exp, act){
     if(!best) return;
     const ns='http://www.w3.org/2000/svg';
     const c=document.createElementNS(ns,'circle');
-    c.setAttribute('cx', best.x); c.setAttribute('cy', best.y - 21);
+    c.setAttribute('cx', best.x); c.setAttribute('cy', best.y + 32);
     c.setAttribute('r', 4.2); c.setAttribute('fill','none');
     c.setAttribute('stroke','var(--bad)'); c.setAttribute('stroke-width','1.5');
     c.setAttribute('stroke-dasharray','2 2'); c.setAttribute('class','hitmark');
@@ -1802,17 +1797,10 @@ function readLink(){
 /* --- ホームのレベル一覧 --- */
 function buildLevels(){
   const box = $('#levels');
-  const mine = (S.saved||[]).map((it,i)=>{
-    const g = renderEvents(it.ev, {});
-    return `<button class="lv" data-mine="${i}">
-      <div class="h"><div class="n">自作 ${i+1}</div><div class="d">${it.bars}しょうせつ</div></div>
-      <div class="ex" style="color:var(--accent)"><svg viewBox="${g.viewBox}">${g.svg}</svg></div>
-    </button>`;
-  }).join('');
   const makeCard = `<button class="lv" data-make="1" style="background:var(--accent-soft)">
       <div class="h"><div class="n">＋ 自分で作る</div><div class="d">曲の中の難しいリズムを入れる</div></div>
     </button>`;
-  box.innerHTML = makeCard + mine + levelSet().map(L=>{
+  box.innerHTML = makeCard + levelSet().map(L=>{
     const dev = (L.demo||[12]).map(d=>({d:Math.abs(d), rest:d<0, tie:false}));
     const g = renderEvents(dev, {bare:true, barTicks: dev.reduce((a,e)=>a+e.d,0)});
     const done = (S.cleared||[]).includes(L.n) ? '<div class="done">できた</div>' : '';
@@ -1824,11 +1812,6 @@ function buildLevels(){
   box.onclick = e=>{
     const b = e.target.closest('.lv'); if(!b) return;
     if(b.dataset.make){ enterMake(); return; }
-    if(b.dataset.mine !== undefined){
-      const it = S.saved[Number(b.dataset.mine)];
-      if(it.meter){ S.meter = it.meter; setMeter(it.meter); syncMeterUI(); }
-      S.bars = it.bars; enterPlayEv(it.ev, it.bars); return;
-    }
     enterPlay(Number(b.dataset.lv));
   };
 }
@@ -2081,12 +2064,6 @@ function boot(){
   });
   $('#mkPlay').addEventListener('click', ()=>{
     if(!M.ev.some(e=>!e.rest)) return;
-    S.saved = S.saved || [];
-    const code = S.meter + '.' + M.bars + '.' + evCode(M.ev);
-    if(!S.saved.some(x=> (x.meter||'4/4')+'.'+x.bars+'.'+evCode(x.ev)===code)){
-      S.saved.unshift({bars:M.bars, meter:S.meter, ev:M.ev.map(e=>Object.assign({},e))});
-      S.saved = S.saved.slice(0,12); save();
-    }
     enterPlayEv(M.ev, M.bars);
   });
   $('#mkShare').addEventListener('click', async ()=>{
