@@ -599,7 +599,8 @@ function minGapEv(ev){
 /* 拍子に合わせてイベント列を作る。
    各拍のまとまり（groups）を、そのまとまりに収まる音価の並びで埋める */
 function genEvents(){
-  const pool = (window.S && S.cells && S.cells.length) ? S.cells : ['q'];
+  // const で宣言した S は window に載らない。window.S で見ると常に空になり、4分音符だけになる
+  const pool = (typeof S !== 'undefined' && S.cells && S.cells.length) ? S.cells : ['q'];
   const allow = new Set(pool);
   const ev = [];
   for(let b=0; b<S.bars; b++){
