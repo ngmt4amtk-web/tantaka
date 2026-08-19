@@ -41,6 +41,20 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 .bpms{display:flex; justify-content:space-between; align-items:center; padding:0 4px}
 .bpms button{width:44px; height:44px; border-radius:50%; font-size:15px; color:var(--accent); font-weight:600}
 .bpms button[aria-pressed="true"]{background:var(--accent); color:#fff}
+.bpmbox{display:flex; align-items:center; gap:9px; padding:0 6px}
+.bpmbox input[type=range]{flex:1 1 auto; min-width:0; -webkit-appearance:none; appearance:none;
+  height:30px; background:transparent; margin:0; touch-action:pan-y}
+.bpmbox input[type=range]::-webkit-slider-runnable-track{height:6px; border-radius:3px; background:var(--card2)}
+.bpmbox input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:28px; height:28px; margin-top:-11px;
+  border-radius:50%; background:var(--accent); border:2px solid var(--bar); box-shadow:0 1px 3px rgb(0 0 0 / 26%)}
+.bpmbox input[type=range]::-moz-range-track{height:6px; border-radius:3px; background:var(--card2)}
+.bpmbox input[type=range]::-moz-range-thumb{width:24px; height:24px; border:2px solid var(--bar); border-radius:50%; background:var(--accent)}
+.bstep{flex:0 0 auto; width:36px; height:36px; border-radius:50%; background:var(--card2);
+  color:var(--accent); font-size:19px; font-weight:700; display:grid; place-items:center}
+.bstep:active{background:var(--accent-soft)}
+.bpmval{flex:0 0 auto; min-width:52px; text-align:center; font-size:18px; font-weight:700;
+  color:var(--ink); font-variant-numeric:tabular-nums}
+.bpmval b{font-size:10px; color:var(--ink3); font-weight:600; margin-left:1px}
 .tb3{display:flex; gap:6px; margin-top:8px; justify-content:center}
 .tb3 button{flex:1; max-width:110px; min-height:34px; border-radius:9px; border:1px solid var(--line);
   background:var(--card); font-size:12.5px; color:var(--ink2)}
@@ -167,7 +181,12 @@ table.det td{font-variant-numeric:tabular-nums}
   </div>
   <div class="tb2" id="bpmRow">
     <div class="lab">BPM</div>
-    <div class="bpms" id="bpms"></div>
+    <div class="bpmbox">
+      <button class="bstep" id="bpmDown" aria-label="1おそく">−</button>
+      <input type="range" id="bpmRange" min="30" max="160" step="1" value="80" aria-label="BPM">
+      <button class="bstep" id="bpmUp" aria-label="1はやく">＋</button>
+      <div class="bpmval"><span id="bpmVal">80</span></div>
+    </div>
   </div>
   <div class="tb3" id="barsRow">
     <button data-v="1" aria-pressed="true">1小節</button>
@@ -350,13 +369,17 @@ function minGap(measures, ties){
 
 /* ---------- 音（先読みスケジューラ） ---------- */
 const Audio_ = {
-  ctx:null, master:null, queue:[], timer:null, tapOn:true,
+  ctx:null, master:null, fx:null, live:[], queue:[], timer:null, tapOn:true,
   async ensure(){
     if(!this.ctx){
       this.ctx = new (window.AudioContext||window.webkitAudioContext)();
       this.master = this.ctx.createGain();
       this.master.gain.value = 0.9;
       this.master.connect(this.ctx.destination);
+      // 効果音は和音で重なるので、クリックとは別の出口にして音割れを防ぐ
+      this.fx = this.ctx.createGain();
+      this.fx.gain.value = 0.7;
+      this.fx.connect(this.master);
     }
     if(this.ctx.state !== 'running'){ try{ await this.ctx.resume(); }catch(e){} }
     return this.ctx;
@@ -379,6 +402,91 @@ const Audio_ = {
     o.connect(g); g.connect(this.master);
     o.start(time); o.stop(time+dur+0.02);
   },
+
+  /* ---------- 効果音（ゲームボーイ風の矩形波） ----------
+     結果は文字で読む前に耳に入る。できた／クリア／もう一度が
+     同じ音だと、音は「終わった合図」にしかならない。3つとも別の音にする。 */
+  tone(t, f, dur, opt){
+    const c = this.ctx; if(!c) return;
+    opt = opt || {};
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = opt.type || 'square';
+    o.frequency.setValueAtTime(f, t);
+    if(opt.to) o.frequency.exponentialRampToValueAtTime(Math.max(40, opt.to), t+dur);
+    const vol = (opt.vol===undefined) ? 0.30 : opt.vol;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t+0.008);
+    g.gain.setValueAtTime(vol, t+Math.max(0.012, dur*0.55));
+    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+    o.connect(g); g.connect(this.fx || this.master);
+    o.start(t); o.stop(t+dur+0.03);
+    this.live.push(o);
+    if(opt.vib){                                   // 伸ばす音だけ、細かく揺らす
+      const lfo = c.createOscillator(), la = c.createGain();
+      lfo.type='sine'; lfo.frequency.value = 6.5; la.gain.value = f*0.013;
+      lfo.connect(la); la.connect(o.frequency);
+      lfo.start(t + Math.min(0.14, dur*0.4)); lfo.stop(t+dur+0.03);
+      this.live.push(lfo);
+    }
+  },
+  noiseHit(t, dur, vol, hz){                        // GBのノイズチャンネルの代わり
+    const c = this.ctx; if(!c) return;
+    if(!this._nb){
+      const n = Math.floor(c.sampleRate*0.4);
+      const b = c.createBuffer(1, n, c.sampleRate), a = b.getChannelData(0);
+      let x = 22222;                                // 毎回おなじ音でよいので固定の疑似乱数
+      for(let i=0;i<n;i++){ x = (x*1103515245 + 12345) & 0x7fffffff; a[i] = (x/0x3fffffff) - 1; }
+      this._nb = b;
+    }
+    const src = c.createBufferSource(); src.buffer = this._nb;
+    const hp = c.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = hz || 2600;
+    const g = c.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+    src.connect(hp); hp.connect(g); g.connect(this.fx || this.master);
+    src.start(t); src.stop(t+dur+0.02);
+    this.live.push(src);
+  },
+  jingle(name){
+    const c = this.ctx; if(!c) return;
+    if(this.live.length > 80) this.live.splice(0, this.live.length-40);
+    const t0 = c.currentTime + 0.03;
+    // 音名（Hz）。ハ長調で、耳になじむ形にする
+    const C5=523.25, D5=587.33, E5=659.25, F5=698.46, G5=783.99, A5=880.00, B5=987.77,
+          C6=1046.5, D6=1174.7, E6=1318.5, G6=1568.0, C7=2093.0,
+          Ab4=415.30, Eb4=311.13, Bb3=233.08, F3=174.61;
+    if(name==='clear'){
+      /* クリア: 駆け上がって、いちばん上で伸ばす。下に和音を重ねて厚くする */
+      const st = 0.072;
+      [C5,E5,G5,C6,E6,G6].forEach((f,i)=>{
+        this.tone(t0+i*st, f, 0.085, {vol:0.30});
+        this.tone(t0+i*st, f/2, 0.085, {vol:0.14, type:'triangle'});
+      });
+      const t1 = t0 + 6*st;
+      this.noiseHit(t0, 0.05, 0.16, 3200);
+      this.noiseHit(t1, 0.22, 0.20, 2200);
+      // 伸ばす和音。いちばん高い音を主役にすると耳に刺さるので、C6 を主役にする
+      this.tone(t1,        C6, 0.66, {vol:0.28, vib:true});
+      this.tone(t1,        G5, 0.66, {vol:0.17});
+      this.tone(t1,        E6, 0.66, {vol:0.14});
+      this.tone(t1,        C5, 0.66, {vol:0.13, type:'triangle'});
+      // 上でチラチラさせる（ごほうびの感じ）
+      [0.30,0.375,0.45].forEach((d,i)=> this.tone(t1+d, i===1?G6:C7, 0.06, {vol:0.15}));
+    } else if(name==='ok'){
+      /* できた: 短く明るく3つ上がるだけ。クリアより小さく、短く */
+      [E5,G5,C6].forEach((f,i)=> this.tone(t0+i*0.058, f, 0.075, {vol:0.30}));
+      this.tone(t0+3*0.058, C6, 0.22, {vol:0.24, vib:true});
+      this.tone(t0+3*0.058, E5, 0.22, {vol:0.13});
+    } else {
+      /* もう一度: 下がる2音。ふざけた音にする（責める音にしない）。
+         低く作るとスマホのスピーカーで消える。中音域で鳴らし、下は薄く足すだけ */
+      this.noiseHit(t0, 0.06, 0.12, 1800);
+      this.tone(t0,        Ab4,  0.13, {vol:0.30});
+      this.tone(t0,        Ab4/2,0.13, {vol:0.13, type:'triangle'});
+      this.tone(t0+0.16,   Eb4,  0.36, {vol:0.30, to:Bb3, vib:true});
+      this.tone(t0+0.16,   Bb3,  0.36, {vol:0.15, to:F3});
+    }
+  },
   schedule(events){ // [{t: audioTime, type}]
     this.queue = this.queue.concat(events).sort((a,b)=>a.t-b.t);
     if(!this.timer) this.timer = setInterval(()=>this.pump(), 25);
@@ -392,7 +500,12 @@ const Audio_ = {
     }
     if(!this.queue.length){ clearInterval(this.timer); this.timer=null; }
   },
-  clear(){ this.queue=[]; if(this.timer){ clearInterval(this.timer); this.timer=null; } },
+  clear(){
+    this.queue=[]; if(this.timer){ clearInterval(this.timer); this.timer=null; }
+    // 鳴っている効果音も止める（「やめる」を押したのに音が続くのはおかしい）
+    this.live.forEach(n=>{ try{ n.stop(); }catch(e){} });
+    this.live = [];
+  },
   now(){ return this.ctx ? this.ctx.currentTime : 0; }
 };
 
@@ -550,6 +663,13 @@ const DUR = {
   s  : {d:3,  name:'16分音符',  beats:'1/4拍'}
 };
 const DUR_ORDER = ['w','h','qd','q','ed','e','s'];
+/* 3連符は「音価の表」には入れない。表に入れるとタイの合成（mergeTies）が
+   3連の長さを普通の音符として書けると誤解する。
+   代わりに、この2つのティック数を見たら3連符だと決め打ちする。
+   4 = 1拍を3つに割った8分の3連符 ／ 8 = 2拍を3つに割った4分の3連符。
+   ふつうの音価（3,6,9,12,18,24,36,48）とは重ならないので、印は要らない。 */
+const TRI_E = 4, TRI_Q = 8;
+function isTri(d){ return d===TRI_E || d===TRI_Q; }
 
 /* =========================================================================
    拍子。4分音符=12ティック。
@@ -604,7 +724,15 @@ function genEvents(){
   const allow = new Set(pool);
   const ev = [];
   for(let b=0; b<S.bars; b++){
-    MT.groups.forEach((g, gi)=>{
+    for(let gi=0; gi<MT.groups.length; gi++){
+      const g = MT.groups[gi];
+      /* 4分の3連符は2拍にまたがるので、まとまり1つでは入らない。
+         4分のまとまりが2つ並んでいるときだけ、2つまとめて埋める。 */
+      if(g===12 && allow.has('t3q') && MT.groups[gi+1]===12 && Math.random() < 0.45){
+        [TRI_Q,TRI_Q,TRI_Q].forEach(d=> ev.push({d:d, rest:false, tie:false}));
+        gi++;
+        continue;
+      }
       // このまとまりに入れる型を選ぶ
       const opts = [];
       if(g === 18){                                       // 付点4分のまとまり（6/8系）
@@ -621,6 +749,8 @@ function genEvents(){
       } else if(g === 24){                                // 2分のまとまり（2/2）
         opts.push([24], [12,12], [12,6,6], [6,6,12]);
         if(allow.has('qr')) opts.push([-24], [12,-12]);
+        if(allow.has('t3q')) opts.push([TRI_Q,TRI_Q,TRI_Q]);          // 1拍（2分）を3つ
+        if(allow.has('t3'))  opts.push([12,TRI_E,TRI_E,TRI_E], [TRI_E,TRI_E,TRI_E,12]);
       } else if(g === 12){                                // 4分のまとまり
         if(allow.has('q'))  opts.push([12]);
         if(allow.has('ee')) opts.push([6,6]);
@@ -628,6 +758,7 @@ function genEvents(){
         if(allow.has('es')) opts.push([6,3,3]);
         if(allow.has('se')) opts.push([3,3,6]);
         if(allow.has('dt')) opts.push([9,3]);
+        if(allow.has('t3')) opts.push([TRI_E,TRI_E,TRI_E]);           // 1拍を3つ
         if(allow.has('qr')) opts.push([-12]);
         if(allow.has('re')) opts.push([-6,6]);
         if(!opts.length) opts.push([12]);
@@ -641,7 +772,7 @@ function genEvents(){
       }
       const pick = opts[Math.floor(Math.random()*opts.length)];
       pick.forEach(d=> ev.push({d:Math.abs(d), rest:d<0, tie:false}));
-    });
+    }
   }
   // 音が1つも無いのは避ける
   if(!ev.some(e=>!e.rest)) return genEvents();
@@ -650,7 +781,8 @@ function genEvents(){
     let t=0;
     for(let i=0;i<ev.length;i++){
       const atStart = MT.groups.some((_,gi)=> (t % MT.bar) === beatStartOf(gi)) && (t % MT.bar) !== 0;
-      if(atStart && i>0 && !ev[i].rest && !ev[i-1].rest && !ev[i-1].tie && Math.random()<0.4) ev[i].tie = true;
+      if(atStart && i>0 && !ev[i].rest && !ev[i-1].rest && !ev[i-1].tie
+         && !isTri(ev[i].d) && !isTri(ev[i-1].d) && Math.random()<0.4) ev[i].tie = true;
       t += ev[i].d;
     }
   }
@@ -1063,6 +1195,23 @@ function renderEvents(ev, opts){
         }
       }
     });
+
+    /* 3連符の「3」。1拍3つ（8分の3連）は連桁の上に数字だけ。
+       2拍3つ（4分の3連）は連桁が無いので、かっこで囲う（記譜の作法） */
+    for(let i=0;i<notes.length;i++){
+      const d0 = notes[i].e.d;
+      if(!isTri(d0) || notes[i].e.rest) continue;
+      const n1 = notes[i+1], n2 = notes[i+2];
+      if(!n1 || !n2 || n1.e.d!==d0 || n2.e.d!==d0 || n1.e.rest || n2.e.rest) continue;
+      const xa = X(notes[i].t) + SC.HEADR - 0.2, xb = X(n2.t) + SC.HEADR - 0.2;
+      const mx = (xa+xb)/2, ty = y - SC.STEM - 5;
+      if(d0===TRI_Q){
+        s += `<path d="M${xa-3} ${ty+4.5} L${xa-3} ${ty} L${mx-5.5} ${ty} M${mx+5.5} ${ty} L${xb+3} ${ty} L${xb+3} ${ty+4.5}"`
+           + ` fill="none" stroke="currentColor" stroke-width="1.2" opacity=".8"/>`;
+      }
+      s += `<text x="${mx}" y="${ty+3.8}" font-size="10.5" font-weight="700" fill="currentColor" opacity=".9" text-anchor="middle">3</text>`;
+      i += 2;
+    }
     globalT += barTicks;
   });
 
@@ -1098,6 +1247,7 @@ function tail(d){
   return '';                        // 半拍以下はそのまま
 }
 function syllable(tickInBeat, d){
+  if(isTri(d)) return 'タ';        // 3連符は「タ タ タ」。位置で子音を変えると裏拍と混ざる
   return ((tickInBeat % 6 === 0) ? 'タ' : 'カ') + tail(d);
 }
 function restSyllable(tickInBeat, d){
@@ -1180,9 +1330,18 @@ function glyphRow(groups){
         }
       }
     }
+    if(n===3 && notes.length===3 && (grp.every(d=>d===TRI_E) || grp.every(d=>d===TRI_Q))){
+      const a = xs[0]+SC.HEADR-0.2, b = xs[2]+SC.HEADR-0.2, mx = (a+b)/2, ty = y-SC.STEM-5;
+      if(grp[0]===TRI_Q){
+        out += `<path d="M${a-3} ${ty+4.5} L${a-3} ${ty} L${mx-5.5} ${ty} M${mx+5.5} ${ty} L${b+3} ${ty} L${b+3} ${ty+4.5}"`
+             + ` fill="none" stroke="currentColor" stroke-width="1.2" opacity=".8"/>`;
+      }
+      out += `<text x="${mx}" y="${ty+3.8}" font-size="10.5" font-weight="700" fill="currentColor" text-anchor="middle">3</text>`;
+    }
     x = xs[xs.length-1] + 12 + GAP;
   });
-  return {svg:out, viewBox:`0 0 ${Math.max(x,60)} 52`};
+  // 上に「3」を書くぶんの余白を、どの絵にも同じだけ取る（絵ごとに大きさが変わらないように）
+  return {svg:out, viewBox:`0 -11 ${Math.max(x,60)} 63`};
 }
 </script>
 
@@ -1205,7 +1364,7 @@ const S = {
   level:1, cleared:[], ev:null, fixedEv:null, syncope:false, watch:null, demoT0:null, cin2T0:null, meter:'4/4', saved:[],
   calib:null,                 // 校正のオフセット(秒)。null=未校正
   phase:'idle',               // idle|countin|play|result|calib
-  measures:null, expected:[], reps:1,
+  measures:null, expected:[], reps:1, demoI:0,
   t0:0, taps:[], results:[], history:[]
 };
 
@@ -1225,7 +1384,7 @@ function load(){
   const num = (v,lo,hi,def)=> (typeof v==='number' && isFinite(v) && v>=lo && v<=hi) ? v : def;
   const oneOf = (v,arr,def)=> arr.includes(v) ? v : def;
   S.bars     = oneOf(num(o.bars,1,4,1), [1,2,4], 1);
-  S.bpm      = num(o.bpm, 40, 200, 80);
+  S.bpm      = Math.max(30, Math.min(160, num(o.bpm, 20, 300, 80)));
   S.goal     = oneOf(num(o.goal,1,3,1), [1,3], 1);
   S.level    = num(o.level, 0, 99, 1);
   S.cond     = oneOf(o.cond, ['all','down','half','none'], 'all');
@@ -1356,6 +1515,7 @@ async function start(){
   el.big.className = 'big count';
   el.hitote.textContent = '';
   el.score.querySelectorAll('.hitmark').forEach(x=>x.remove());
+  clearModelMarks(); S.demoI = 0;
 
   const beat = spb();
   const barBeats = S.bars*MT.count;
@@ -1409,11 +1569,12 @@ function startLoop(){
     if(S.phase==='countin'){
       if(t >= S.t0){
         S.phase='play';
+        clearModelMarks();                       // 自分の印と混ざらないように
         el.big.className='big'; el.big.textContent='あなた';
         el.hitote.textContent='';
       } else if(S.cin2T0 !== null && S.cin2T0 !== undefined && t >= S.cin2T0){
         const n = Math.max(0, Math.floor((t - S.cin2T0)/beat));
-        const v = String(Math.max(1, MT.count-n));
+        const v = String(Math.min(MT.count, n+1));
         if(el.big.textContent !== v){ el.big.className='big count'; el.big.textContent = v; }
         el.hitote.textContent = '次 あなた';
         setBeatDot(-1);
@@ -1424,9 +1585,10 @@ function startLoop(){
         }
         const b = Math.floor((t - S.demoT0)/beat);
         setBeatDot(b>=0 ? (b % MT.count) : -1);
+        modelTick(S.demoT0);
       } else {
         const n = Math.max(0, Math.floor((t - S.cinT0)/beat));
-        const v = String(Math.max(1, MT.count-n));
+        const v = String(Math.min(MT.count, n+1));
         if(el.big.textContent !== v){ el.big.className='big count'; el.big.textContent = v; }
         if(!el.hitote.textContent) el.hitote.textContent = S.call ? '次 お手本' : '次 あなた';
       }
@@ -1469,6 +1631,7 @@ function onTap(ev, pad){
      （早すぎるタップは判定の窓で落ちるので、拾っておくのが正しい） */
   if(S.phase === 'countin' && t > S.t0 - 0.30){
     S.phase = 'play';
+    clearModelMarks();
     el.big.className='big'; el.big.textContent='あなた';
     el.hitote.textContent='';
   }
@@ -1517,6 +1680,38 @@ function markHit(t){
   el.score.appendChild(ring);
   setTimeout(()=>ring.remove(), 260);
 }
+/* お手本にも、叩いたときと同じ丸を出す。
+   ・音だけだと「どの音符が今鳴ったか」を耳で追える子にしか届かない
+   ・色は自分の印と変える（お手本＝アクセント色）。自分の番に入る前に消す */
+function markModel(beatPos){
+  if(!S.marks || !S.marks.length) return;
+  let best=null, bd=1e9;
+  S.marks.forEach(m=>{ const d = Math.abs(m.t/MT.beat - beatPos); if(d<bd){ bd=d; best=m; } });
+  if(!best) return;
+  const ns='http://www.w3.org/2000/svg';
+  const g=document.createElementNS(ns,'g');
+  g.setAttribute('class','modelmark');
+  const c=document.createElementNS(ns,'circle');
+  c.setAttribute('cx', best.x); c.setAttribute('cy', best.y + 32);
+  c.setAttribute('r', 4.2); c.setAttribute('fill','var(--accent)'); c.setAttribute('opacity','.6');
+  g.appendChild(c);
+  el.score.appendChild(g);
+  const ring=document.createElementNS(ns,'circle');
+  ring.setAttribute('cx', best.x); ring.setAttribute('cy', best.y);
+  ring.setAttribute('r', 9); ring.setAttribute('fill','none');
+  ring.setAttribute('stroke','var(--accent)'); ring.setAttribute('stroke-width','2'); ring.setAttribute('opacity','.75');
+  ring.setAttribute('class','hitring');
+  el.score.appendChild(ring);
+  setTimeout(()=>ring.remove(), 260);
+}
+function clearModelMarks(){ el.score.querySelectorAll('.modelmark').forEach(x=>x.remove()); }
+/* お手本の進みに合わせて、鳴った打点ぶんだけ丸を足す */
+function modelTick(t0){
+  const beat = spb();
+  while(S.demoI < S.expected.length && t0 !== null && Audio_.now() >= t0 + S.expected[S.demoI]*beat){
+    markModel(S.expected[S.demoI]); S.demoI++;
+  }
+}
 /* 判定が出たら、印に色を付ける（緑=範囲内、オレンジ=外れ、赤=余分） */
 function paintHits(res, diffs, usePhase, W, exp, act){
   const marks = [...el.score.querySelectorAll('.hitmark')];
@@ -1550,6 +1745,17 @@ function paintHits(res, diffs, usePhase, W, exp, act){
     c.setAttribute('stroke-dasharray','2 2'); c.setAttribute('class','hitmark');
     el.score.appendChild(c);
   });
+}
+
+/* 拍の中のどこかを、子どもに通じることばで言う。
+   3連符は4分割の言い方では言えない（1/3 を「2つ目」と言うと16分と混ざる） */
+function posWord(fr){
+  if(fr < 0.08) return '';
+  if(Math.abs(fr - 1/3) < 0.07) return 'の3連の2つ目';
+  if(Math.abs(fr - 2/3) < 0.07) return 'の3連の3つ目';
+  if(fr < 0.375) return 'の2つ目';
+  if(fr < 0.625) return 'の裏';
+  return 'の4つ目';
 }
 
 /* ---------- 判定 ---------- */
@@ -1635,9 +1841,7 @@ function finish(){
     const barBeats = S.bars*MT.count;
     const nth = Math.floor(b % MT.count) + 1;
     const bar = Math.floor(b / MT.count) + 1;
-    const fr = b % 1;
-    const pos = fr < 0.125 ? '' : (fr < 0.375 ? 'の2つ目' : (fr < 0.625 ? 'の裏' : 'の4つ目'));
-    word = (S.bars>1 ? `${bar}小節目の ` : '') + `${nth}拍目${pos}の音が抜けた`;
+    word = (S.bars>1 ? `${bar}小節目の ` : '') + `${nth}拍目${posWord(b % 1)}の音が抜けた`;
   } else if(res.extra.length){
     word = `余分に ${res.extra.length}回叩いた`;
   } else if(sl!==null && Math.abs(sl) > 0.012 && Math.abs(sl)*xs[xs.length-1] > W*0.8){
@@ -1661,9 +1865,7 @@ function finish(){
     const bp = S.expected[res.pairs[wi][0]];
     const nth = Math.floor(bp % MT.count)+1;
     const bar = Math.floor(bp / MT.count)+1;
-    const fr2 = bp % 1;
-    const pos2 = fr2 < 0.125 ? '' : (fr2 < 0.375 ? 'の2つ目' : (fr2 < 0.625 ? 'の裏' : 'の4つ目'));
-    word = (S.bars>1 ? `${bar}小節目の ` : '') + `${nth}拍目${pos2}が ${diffs[wi]-usePhase>0?'遅かった':'早かった'}`;
+    word = (S.bars>1 ? `${bar}小節目の ` : '') + `${nth}拍目${posWord(bp % 1)}が ${diffs[wi]-usePhase>0?'遅かった':'早かった'}`;
   } else if(spread > W*0.55){
     word = '揃ってきた。少しばらつきがある';
   } else {
@@ -1675,7 +1877,6 @@ function finish(){
   el.hitote.textContent = word;
   el.detail.hidden = false;
   setStreak();
-  if(ok) Audio_.click(Audio_.now()+0.02, 'ok');
 
   // 目標の達成（3もんモードは直近3問中2問）
   let cleared = false;
@@ -1688,6 +1889,8 @@ function finish(){
     save();
     S.results = [];
   }
+  // 音は結果が全部決まってから。クリアとできたを同じ音にすると、達成が消える
+  Audio_.jingle(cleared ? 'clear' : (ok ? 'ok' : 'again'));
 
   // ---- くわしく ----
   const fmt = (v,u)=> (v===null||v===undefined) ? '—' : (Math.round(v*10)/10)+u;
@@ -1730,7 +1933,11 @@ const LEVELS_SIMPLE = [
   {n:7, cells:['q','ee','ss','es','se'],      d:'8分と16分の混ざり',      demo:[[6,6],[3,3,3,3],[6,3,3]]},
   {n:8, cells:['q','ee','dt'],                d:'タッカ（付点8分＋16分）', demo:[[12],[6,6],[9,3]]},
   {n:9, cells:['q','ee','qr','re'],           d:'裏から入る',             demo:[[12],[6,6],[-6,6]]},
-  {n:10,cells:['q','ee','ss','dt','qr','re'], d:'全部',                  demo:[[12],[6,6],[3,3,3,3],[9,3],[-12]]}
+  {n:10,cells:['q','ee','ss','dt','qr','re'], d:'全部（3連はのぞく）',    demo:[[12],[6,6],[3,3,3,3],[9,3],[-12]]},
+  {n:11,cells:['q','ee','t3'],                d:'3連符（1拍を3つ）',      demo:[[12],[6,6],[4,4,4]]},
+  {n:12,cells:['q','ee','t3q'],               d:'3連符（2拍を3つ）',      demo:[[12],[8,8,8]]},
+  {n:13,cells:['q','ee','ss','dt','qr','re','t3','t3q'],
+                                              d:'ぜんぶ（3連も）',        demo:[[12],[6,6],[3,3,3,3],[4,4,4],[8,8,8]]}
 ];
 /* 6/8・9/8・12/8 用。1拍は8分音符で、8分3つがひとまとまり */
 const LEVELS_COMPOUND = [
@@ -1745,7 +1952,7 @@ const LEVELS_COMPOUND = [
 function isCompound(){ return MT.groups.some(g=> g===18); }
 function levelSet(){ return isCompound() ? LEVELS_COMPOUND : LEVELS_SIMPLE; }
 
-const BPMS = [60, 80, 100, 120, 140];
+const BPM_MIN = 30, BPM_MAX = 160;
 
 
 /* ================= 自分でつくるモード =================
@@ -1783,8 +1990,25 @@ function mkPalette(){
       + `<svg viewBox="12 8 62 54" preserveAspectRatio="xMidYMid meet">${g.svg}</svg>`
       + `<span>${rest? '休符' : DUR[id].name.replace('音符','')}<br><b style="color:var(--ink2); font-weight:600">${DUR[id].beats}</b></span></button>`;
   };
+  /* 3連符は1個ずつ置けない（3つで1拍ぶん）。ボタン1つで3つまとめて置く。
+     6/8系は1拍が8分3つなので、3連符の席が無い。出さない。 */
+  const tri = (id, ds, sub)=>{
+    const g = glyphRow([ds]);
+    return `<button data-tri="${id}">`
+      + `<svg viewBox="${g.viewBox}" preserveAspectRatio="xMidYMid meet" style="max-width:58px">${g.svg}</svg>`
+      + `<span>3連符<br><b style="color:var(--ink2); font-weight:600">${sub}</b></span></button>`;
+  };
+  const tris = isCompound() ? ''
+    : tri('t3', [TRI_E,TRI_E,TRI_E], '1拍') + tri('t3q', [TRI_Q,TRI_Q,TRI_Q], '2拍');
   $('#mkPalNote').innerHTML = PAL_N.map(id=>cell(id,false)).join('')
+                            + tris
                             + PAL_R.map(id=>cell(id,true)).join('');
+}
+function mkAddTri(id){
+  const d = (id==='t3q') ? TRI_Q : TRI_E;
+  if(evTotal(M.ev) + d*3 > mkCap()) return;      // 3つぶん入らないなら置かせない
+  for(let i=0;i<3;i++) M.ev.push({d:d, rest:false, tie:false});
+  mkDraw();
 }
 function mkAdd(id, rest){
   const d = DUR[id].d;
@@ -1797,9 +2021,10 @@ function enterMake(preset){
   document.body.classList.add('making');
   $('#btnBack').hidden = false; $('#btnSet').hidden = true; $('#playTopRight').hidden = true;
   $('#barsRow').style.display = '';
-  if(preset){ M.bars = preset.bars; M.ev = preset.ev.map(e=>Object.assign({},e)); }
-  M.bars = S.bars;
-  if(evTotal(M.ev) > mkCap()) M.ev = [];
+  if(preset){ M.bars = preset.bars; M.ev = preset.ev.map(e=>Object.assign({},e)); S.bars = M.bars; }
+  else M.bars = S.bars;
+  [...$('#barsRow').children].forEach(x=> x.setAttribute('aria-pressed', String(Number(x.dataset.v)===S.bars)));
+  while(M.ev.length && evTotal(M.ev) > mkCap()) M.ev.pop();
   mkPalette(); mkDraw();
 }
 function exitMake(){
@@ -1819,8 +2044,10 @@ function evParse(str){
   return out.length ? out : null;
 }
 function makeLink(){
+  /* 拍子の「/」だけを逃がす。ここで全体をもう一度包むと、読むときの
+     decodeURIComponent 1回では %2F が残り、v4 のリンクが読めなくなる */
   const code = 'v4.' + encodeURIComponent(S.meter) + '.' + M.bars + '.' + evCode(M.ev);
-  return location.origin + location.pathname + '#' + encodeURIComponent(code);
+  return location.origin + location.pathname + '#' + code;
 }
 function readLink(){
   const h = decodeURIComponent(location.hash.replace(/^#/,''));
@@ -1853,15 +2080,31 @@ function buildLevels(){
   };
 }
 
-/* --- BPM ピル --- */
+/* --- BPM スライダー（30〜160） ---
+   刻みは1。速い側は数字の差が効きにくいので、はしの±ボタンで1ずつ動かせるようにする。
+   演奏中に動かしても、いま鳴っている拍は変えない（次のスタートから効く）。 */
+function setBpm(v, redraw){
+  const n = Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(Number(v)||80)));
+  S.bpm = n;
+  const r = $('#bpmRange'); if(r && Number(r.value)!==n) r.value = String(n);
+  const t = $('#bpmVal'); if(t) t.textContent = String(n);
+  if(redraw) save();
+}
 function buildBpms(){
-  $('#bpms').innerHTML = BPMS.map(v=>`<button data-v="${v}" aria-pressed="${v===S.bpm}">${v}</button>`).join('');
-  $('#bpms').addEventListener('click', e=>{
-    const b=e.target.closest('button'); if(!b) return;
-    S.bpm = Number(b.dataset.v);
-    [...$('#bpms').children].forEach(x=> x.setAttribute('aria-pressed', String(Number(x.dataset.v)===S.bpm)));
-    save();
-    if(S.phase==='idle' && document.body.classList.contains('playing')) newQuestion();
+  const r = $('#bpmRange');
+  r.min = String(BPM_MIN); r.max = String(BPM_MAX);
+  setBpm(S.bpm, false);
+  r.addEventListener('input', ()=> setBpm(r.value, false));
+  r.addEventListener('change', ()=> setBpm(r.value, true));
+  const step = d => { setBpm(S.bpm + d, true); };
+  $('#bpmDown').addEventListener('click', ()=> step(-1));
+  $('#bpmUp').addEventListener('click', ()=> step(1));
+  // 長押しで連続。1ずつ押させると30→160が遠すぎる
+  [['#bpmDown',-1],['#bpmUp',1]].forEach(([sel,d])=>{
+    const b = $(sel); let tm=null, iv=null;
+    const stop = ()=>{ clearTimeout(tm); clearInterval(iv); tm=iv=null; };
+    b.addEventListener('pointerdown', ()=>{ stop(); tm = setTimeout(()=>{ iv = setInterval(()=> step(d), 60); }, 420); });
+    ['pointerup','pointerleave','pointercancel'].forEach(ev=> b.addEventListener(ev, stop));
   });
 }
 
@@ -1930,9 +2173,11 @@ async function playModel(){
   Audio_.schedule(ev);
   el.big.className='big'; el.big.textContent='聴いて';
   el.hitote.textContent = '譜面の下の読みを声に出して';
+  clearModelMarks(); S.demoI = 0;      // 自分の結果の印は消さない（お手本と見くらべられる）
   const endT = s0 + (S.bars*MT.count)*beat + 0.4;
   const back = ()=>{
     if(S.phase!=='idle' && S.phase!=='result') return;
+    modelTick(s0);
     if(Audio_.now() >= endT){
       el.big.textContent = S.phase==='result' ? 'もう一度' : '準備';
       return;
@@ -2045,6 +2290,14 @@ function boot(){
     S.bars=Number(b.dataset.v);
     [...$('#barsRow').children].forEach(x=> x.setAttribute('aria-pressed', String(Number(x.dataset.v)===S.bars)));
     save();
+    /* 作っている途中で小節数を変えたら、その場で入れ物を広げる。
+       作りかけを捨てて最初からやり直させない（増やすときは何も失われない）。
+       減らしてあふれたぶんだけ、後ろから落とす。 */
+    if(document.body.classList.contains('making')){
+      M.bars = S.bars;
+      while(M.ev.length && evTotal(M.ev) > mkCap()) M.ev.pop();
+      mkDraw();
+    }
   });
   bindSeg('#segCond','cond', ()=>{ if(document.body.classList.contains('playing')) updateBeatDots(); });
   bindSeg('#segGoal','goal', ()=>{ S.results=[]; setStreak(); }, v=>Number(v));
@@ -2077,7 +2330,7 @@ function boot(){
     S.meter = b.dataset.v; setMeter(S.meter);
     buildBeatDots(); syncMeterUI(); save();
     M.ev = [];                                   // 拍子が変われば作りかけは捨てる
-    if(document.body.classList.contains('making')) mkDraw();
+    if(document.body.classList.contains('making')){ mkPalette(); mkDraw(); }
     else if(document.body.classList.contains('playing') && S.phase==='idle' && !S.fixedEv) newQuestion();
     else buildLevels();
   });
@@ -2094,9 +2347,18 @@ function boot(){
     if(!last || last.rest || !prev || prev.rest) return;
     last.tie = !last.tie; mkDraw();
   });
-  $('#mkUndo').addEventListener('click', ()=>{ M.ev.pop(); mkDraw(); });
+  $('#mkUndo').addEventListener('click', ()=>{
+    // 3連符は3つで1つの形。1個だけ消すと、残り2つが宙に浮く
+    const last = M.ev[M.ev.length-1];
+    if(last && isTri(last.d)){
+      let n=0;
+      while(n<3 && M.ev.length && M.ev[M.ev.length-1].d===last.d){ M.ev.pop(); n++; }
+    } else M.ev.pop();
+    mkDraw();
+  });
   $('#mkPalNote').addEventListener('click', e=>{
     const b=e.target.closest('button'); if(!b) return;
+    if(b.dataset.tri){ mkAddTri(b.dataset.tri); return; }
     mkAdd(b.dataset.d, b.dataset.r==='1');
   });
   $('#mkPlay').addEventListener('click', ()=>{
