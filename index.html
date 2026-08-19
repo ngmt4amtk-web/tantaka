@@ -378,7 +378,7 @@ const Audio_ = {
       this.master.connect(this.ctx.destination);
       // 効果音は和音で重なるので、クリックとは別の出口にして音割れを防ぐ
       this.fx = this.ctx.createGain();
-      this.fx.gain.value = 0.7;
+      this.fx.gain.value = 0.42;
       this.fx.connect(this.master);
     }
     if(this.ctx.state !== 'running'){ try{ await this.ctx.resume(); }catch(e){} }
@@ -459,32 +459,34 @@ const Audio_ = {
       /* クリア: 駆け上がって、いちばん上で伸ばす。下に和音を重ねて厚くする */
       const st = 0.072;
       [C5,E5,G5,C6,E6,G6].forEach((f,i)=>{
-        this.tone(t0+i*st, f, 0.085, {vol:0.30});
-        this.tone(t0+i*st, f/2, 0.085, {vol:0.14, type:'triangle'});
+        this.tone(t0+i*st, f, 0.085, {vol:0.28});
+        this.tone(t0+i*st, f/2, 0.085, {vol:0.12, type:'triangle'});
       });
       const t1 = t0 + 6*st;
-      this.noiseHit(t0, 0.05, 0.16, 3200);
-      this.noiseHit(t1, 0.22, 0.20, 2200);
-      // 伸ばす和音。いちばん高い音を主役にすると耳に刺さるので、C6 を主役にする
-      this.tone(t1,        C6, 0.66, {vol:0.28, vib:true});
-      this.tone(t1,        G5, 0.66, {vol:0.17});
-      this.tone(t1,        E6, 0.66, {vol:0.14});
-      this.tone(t1,        C5, 0.66, {vol:0.13, type:'triangle'});
+      this.noiseHit(t0, 0.05, 0.11, 3200);
+      this.noiseHit(t1, 0.22, 0.13, 2200);
+      /* 伸ばす和音。いちばん高い音を主役にすると耳に刺さるので C6 を主役にする。
+         ここは長く鳴るぶん、音量をそのままにすると「派手」ではなく「うるさい」になる。
+         駆け上がりより一段下げて、余韻として置く。 */
+      this.tone(t1,        C6, 0.66, {vol:0.20, vib:true});
+      this.tone(t1,        G5, 0.66, {vol:0.12});
+      this.tone(t1,        E6, 0.66, {vol:0.10});
+      this.tone(t1,        C5, 0.66, {vol:0.10, type:'triangle'});
       // 上でチラチラさせる（ごほうびの感じ）
-      [0.30,0.375,0.45].forEach((d,i)=> this.tone(t1+d, i===1?G6:C7, 0.06, {vol:0.15}));
+      [0.30,0.375,0.45].forEach((d,i)=> this.tone(t1+d, i===1?G6:C7, 0.06, {vol:0.12}));
     } else if(name==='ok'){
       /* できた: 短く明るく3つ上がるだけ。クリアより小さく、短く */
-      [E5,G5,C6].forEach((f,i)=> this.tone(t0+i*0.058, f, 0.075, {vol:0.30}));
-      this.tone(t0+3*0.058, C6, 0.22, {vol:0.24, vib:true});
-      this.tone(t0+3*0.058, E5, 0.22, {vol:0.13});
+      [E5,G5,C6].forEach((f,i)=> this.tone(t0+i*0.058, f, 0.075, {vol:0.34}));
+      this.tone(t0+3*0.058, C6, 0.22, {vol:0.26, vib:true});
+      this.tone(t0+3*0.058, E5, 0.22, {vol:0.14});
     } else {
       /* もう一度: 下がる2音。ふざけた音にする（責める音にしない）。
          低く作るとスマホのスピーカーで消える。中音域で鳴らし、下は薄く足すだけ */
-      this.noiseHit(t0, 0.06, 0.12, 1800);
-      this.tone(t0,        Ab4,  0.13, {vol:0.30});
-      this.tone(t0,        Ab4/2,0.13, {vol:0.13, type:'triangle'});
-      this.tone(t0+0.16,   Eb4,  0.36, {vol:0.30, to:Bb3, vib:true});
-      this.tone(t0+0.16,   Bb3,  0.36, {vol:0.15, to:F3});
+      this.noiseHit(t0, 0.06, 0.07, 1800);
+      this.tone(t0,        Ab4,  0.13, {vol:0.22});
+      this.tone(t0,        Ab4/2,0.13, {vol:0.09, type:'triangle'});
+      this.tone(t0+0.16,   Eb4,  0.36, {vol:0.20, to:Bb3, vib:true});
+      this.tone(t0+0.16,   Bb3,  0.36, {vol:0.10, to:F3});
     }
   },
   schedule(events){ // [{t: audioTime, type}]
