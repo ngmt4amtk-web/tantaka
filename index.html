@@ -168,6 +168,8 @@ table.det td{font-variant-numeric:tabular-nums}
 .tl{width:100%; height:auto; display:block; margin:8px 0 4px; background:var(--card); border-radius:12px}
 .warnbox{margin-top:10px; padding:10px 12px; border-radius:10px; background:rgb(180 83 9 / 10%);
   border:1px solid rgb(180 83 9 / 26%); font-size:12.5px; color:var(--warn); line-height:1.6}
+
+.coveragehint{font-size:10.5px;color:var(--ink2);margin-top:4px}.lv:disabled{opacity:.45;cursor:default}.reps{line-height:1.5}
 </style>
 </head>
 <body>
@@ -720,75 +722,75 @@ function minGapEv(ev){
 
 /* 拍子に合わせてイベント列を作る。
    各拍のまとまり（groups）を、そのまとまりに収まる音価の並びで埋める */
-function genEvents(){
-  // const で宣言した S は window に載らない。window.S で見ると常に空になり、4分音符だけになる
-  const pool = (typeof S !== 'undefined' && S.cells && S.cells.length) ? S.cells : ['q'];
-  const allow = new Set(pool);
-  const ev = [];
-  for(let b=0; b<S.bars; b++){
-    for(let gi=0; gi<MT.groups.length; gi++){
-      const g = MT.groups[gi];
-      /* 4分の3連符は2拍にまたがるので、まとまり1つでは入らない。
-         4分のまとまりが2つ並んでいるときだけ、2つまとめて埋める。 */
-      if(g===12 && allow.has('t3q') && MT.groups[gi+1]===12 && Math.random() < 0.45){
-        [TRI_Q,TRI_Q,TRI_Q].forEach(d=> ev.push({d:d, rest:false, tie:false}));
-        gi++;
-        continue;
-      }
-      // このまとまりに入れる型を選ぶ
-      const opts = [];
-      if(g === 18){                                       // 付点4分のまとまり（6/8系）
-        if(allow.has('c3'))  opts.push([6,6,6]);          // タ タ タ
-        if(allow.has('cd'))  opts.push([18]);             // ターン（1つで1拍分）
-        if(allow.has('cq'))  opts.push([12,6]);           // ター タ
-        if(allow.has('cqe')) opts.push([6,12]);           // タ ター
-        if(allow.has('cs')){
-          if(allow.size===1) opts.push([3,3,3,3,3,3]);     // 16分だけのレベル
-          else opts.push([3,3,6,6],[6,3,3,6],[6,6,3,3]);
-        }
-        if(allow.has('cr'))  opts.push([-18],[6,-6,6],[-6,6,6],[6,6,-6]);
-        if(!opts.length) opts.push([6,6,6]);
-      } else if(g === 24){                                // 2分のまとまり（2/2）
-        opts.push([24], [12,12], [12,6,6], [6,6,12]);
-        if(allow.has('qr')) opts.push([-24], [12,-12]);
-        if(allow.has('t3q')) opts.push([TRI_Q,TRI_Q,TRI_Q]);          // 1拍（2分）を3つ
-        if(allow.has('t3'))  opts.push([12,TRI_E,TRI_E,TRI_E], [TRI_E,TRI_E,TRI_E,12]);
-      } else if(g === 12){                                // 4分のまとまり
-        if(allow.has('q'))  opts.push([12]);
-        if(allow.has('ee')) opts.push([6,6]);
-        if(allow.has('ss')) opts.push([3,3,3,3]);
-        if(allow.has('es')) opts.push([6,3,3]);
-        if(allow.has('se')) opts.push([3,3,6]);
-        if(allow.has('dt')) opts.push([9,3]);
-        if(allow.has('t3')) opts.push([TRI_E,TRI_E,TRI_E]);           // 1拍を3つ
-        if(allow.has('qr')) opts.push([-12]);
-        if(allow.has('re')) opts.push([-6,6]);
-        if(!opts.length) opts.push([12]);
-      } else if(g === 6){                                 // 8分のまとまり（3/8 など）
-        opts.push([6]);
-        if(allow.has('ss')) opts.push([3,3]);
-        if(allow.has('qr')) opts.push([-6]);
-      } else {                                            // それ以外は素直に埋める
-        opts.push([g]);
-        if(g % 2 === 0) opts.push([g/2, g/2]);
-      }
-      const pick = opts[Math.floor(Math.random()*opts.length)];
-      pick.forEach(d=> ev.push({d:Math.abs(d), rest:d<0, tie:false}));
-    }
+const QUESTION_VOICES=1;
+// A bounded planner guarantees the rhythms printed on the selected level card.
+const COVERAGE_SHAPES={q:[[12]],qr:[[-12]],ee:[[6,6]],ss:[[3,3,3,3]],es:[[6,3,3]],se:[[3,3,6]],dt:[[9,3]],re:[[-6,6]],t3:[[4,4,4]],t3q:[[8,8,8]],c3:[[6,6,6]],cd:[[18]],cq:[[12,6]],cqe:[[6,12]],cs:[[3,3,3,3,3,3],[3,3,6,6],[6,3,3,6],[6,6,3,3]],cr:[[-18],[6,-6,6],[-6,6,6],[6,6,-6]]};
+const coverageCache=new Map();
+function hasRhythm(ds,pattern){
+  return ds.some((_,i)=>pattern.every((d,j)=>ds[i+j]===d));
+}
+function coveragePlan(level,voices,bars){
+  const key=JSON.stringify([S.meter,level.cells,level.demo,!!level.random,voices,bars]);
+  if(coverageCache.has(key))return coverageCache.get(key);
+  const required=level.random?[]:(level.demo||[[12]]),goal=(1<<required.length)-1,notesGoal=(1<<voices)-1;
+  const slots=[];
+  for(let v=0;v<voices;v++)for(let bar=0;bar<bars;bar++){
+    let t=0;for(const g of MT.groups){for(const len of g===24?[12,12]:[g]){slots.push({v,bar,t,len});t+=len;}}
   }
-  // 音が1つも無いのは避ける
-  if(!ev.some(e=>!e.rest)) return genEvents();
-  // シンコペーション: 拍のまとまりの頭の音を、前の音と繋ぐ
-  if(S.syncope){
-    let t=0;
-    for(let i=0;i<ev.length;i++){
-      const atStart = MT.groups.some((_,gi)=> (t % MT.bar) === beatStartOf(gi)) && (t % MT.bar) !== 0;
-      if(atStart && i>0 && !ev[i].rest && !ev[i-1].rest && !ev[i-1].tie
-         && !isTri(ev[i].d) && !isTri(ev[i-1].d) && Math.random()<0.4) ev[i].tie = true;
-      t += ev[i].d;
+  const shapes=level.cells.flatMap(id=>COVERAGE_SHAPES[id]||[]);
+  const options=slots.map((slot,i)=>{
+    let candidates=shapes.slice();
+    // Complete shorter meter groups using subdivisions of the selected rhythms.
+    if(slot.len===6){if(level.cells.some(id=>['ee','re','c3','cq','cqe','cr'].includes(id)))candidates.push([6]);if(level.cells.some(id=>['ss','cs'].includes(id)))candidates.push([3,3]);}
+    if(slot.len===12){if(level.cells.some(id=>['c3','cq','cqe','cr'].includes(id)))candidates.push([6,6]);if(level.cells.includes('cs'))candidates.push([3,3,3,3]);}
+    const seen=new Set(),out=[];
+    for(const ds of candidates){
+      const sig=ds.join(',');if(seen.has(sig))continue;seen.add(sig);
+      const dur=ds.reduce((a,d)=>a+Math.abs(d),0);let used=0,j=i;
+      while(j<slots.length&&slots[j].v===slot.v&&slots[j].bar===slot.bar&&used<dur)used+=slots[j++].len;
+      if(used!==dur)continue;
+      // Tuplets and short patterns must start on a complete generation group.
+      const mask=required.reduce((m,p,k)=>m|(hasRhythm(ds,p)?1<<k:0),0);
+      out.push({ds,next:j,mask,note:ds.some(d=>d>0)?1<<slot.v:0});
     }
+    return out;
+  });
+  const memo=new Map();
+  function can(pos,mask,notes){
+    if(pos===slots.length)return mask===goal&&notes===notesGoal;
+    const k=pos+':'+mask+':'+notes;if(memo.has(k))return memo.get(k);
+    const ok=options[pos].some(o=>can(o.next,mask|o.mask,notes|o.note));memo.set(k,ok);return ok;
   }
-  return mergeTies(ev);
+  const plan=can(0,0,0)?{bars,voices,required,slots,options,can}:null;
+  if(coverageCache.size>80)coverageCache.clear();coverageCache.set(key,plan);return plan;
+}
+function findCoveragePlan(level,voices,minBars=1){
+  for(const bars of [1,2,4]){if(bars<minBars)continue;const p=coveragePlan(level,voices,bars);if(p)return p;}return null;
+}
+function sampleCoverage(plan,rng=Math.random){
+  const out=Array.from({length:plan.voices},()=>[]);let pos=0,mask=0,notes=0;
+  while(pos<plan.slots.length){
+    const eligible=plan.options[pos].filter(o=>plan.can(o.next,mask|o.mask,notes|o.note));
+    const o=eligible[Math.min(eligible.length-1,Math.floor(rng()*eligible.length))];
+    const protect=!!(o.mask&~mask),v=plan.slots[pos].v;
+    o.ds.forEach(d=>out[v].push({d:Math.abs(d),rest:d<0,tie:false,required:protect}));
+    pos=o.next;mask|=o.mask;notes|=o.note;
+  }
+  return out.map(ev=>{
+    if(S.syncope){let t=0;for(let i=0;i<ev.length;i++){
+      const atStart=MT.groups.some((_,gi)=>(t%MT.bar)===beatStartOf(gi))&&(t%MT.bar)!==0;
+      if(atStart&&i>0&&!ev[i].required&&!ev[i-1].required&&!ev[i].rest&&!ev[i-1].rest&&!ev[i-1].tie&&!isTri(ev[i].d)&&!isTri(ev[i-1].d)&&rng()<.4)ev[i].tie=true;
+      t+=ev[i].d;
+    }}
+    return mergeTies(ev).map(({required,...e})=>e);
+  });
+}
+function generateCoveredQuestion(){
+  const level=levelSet().find(l=>l.n===S.level)||levelSet()[0];S.cells=level.cells;
+  const plan=findCoveragePlan(level,QUESTION_VOICES,S.bars);if(!plan)return null;
+  const grown=plan.bars!==S.bars;S.bars=plan.bars;
+  S.coverageNote=level.random?'表示のリズムは候補です。毎回ランダムに出題します':grown?`全種類を入れるため ${S.bars}小節で出題`:(QUESTION_VOICES===2?'左右を合わせて、表示の全種類が入っています':'表示の全種類が入っています');
+  syncSeg('#barsRow','bars');save();return sampleCoverage(plan);
 }
 
 /* セル列 → イベント列（ランダム生成の結果を正本の形へ移す） */
@@ -1100,7 +1102,7 @@ function renderEvents(ev, opts){
   const barw = (SC.W - padL - SC.PADX) / perRow;
   const H = rows * SC.ROWH + (opts.chant ? 42 : 20);   // 口唱歌＋叩いた印のぶん
   let s = '';
-  const marks = [];
+  const marks = [],geometry=[];
 
   for(let r=0; r<rows; r++){
     const y = SC.BASE + r*SC.ROWH;
@@ -1148,6 +1150,8 @@ function renderEvents(ev, opts){
       const b = beatIndexOf(tick);
       return beatX[b] + ((tick - beatStartOf(b))/MT.groups[b])*beatW[b];
     };
+
+    for(let b=0;b<nb;b++)geometry.push({t0:globalT+beatStartOf(b),t1:globalT+beatStartOf(b)+MT.groups[b],x0:beatX[b],x1:beatX[b]+beatW[b],y,row:r,minX:bx+2,maxX:bx+barw-4});
 
     // 連桁グループ: 同じ拍の中で 8分以下の音が続くところ
     const notes = [];
@@ -1231,7 +1235,7 @@ function renderEvents(ev, opts){
     s += `<path d="M${a} ${y1} Q${mx} ${y1+dip} ${b} ${y1}" fill="none" stroke="currentColor" stroke-width="1.7" opacity=".9"/>`;
   });
 
-  return {svg:s, height:H, viewBox:`0 0 ${SC.W} ${H}`, marks};
+  return {svg:s, height:H, viewBox:`0 0 ${SC.W} ${H}`, marks,geometry};
 }
 
 /* 口唱歌の音節。2つの軸で決まる。
@@ -1411,8 +1415,8 @@ function drawScore(){
   el.score.setAttribute('viewBox', g.viewBox);
   el.score.innerHTML = g.svg;
   el.score.style.color = 'var(--note)';
-  S.marks = g.marks;
-  el.reps.textContent = '';
+  S.marks = g.marks;S.geometry=g.geometry;
+  el.reps.textContent = S.coverageNote||'';
 }
 function setStreak(){
   if(S.goal===1){ el.streak.hidden = true; return; }
@@ -1455,15 +1459,12 @@ function chantOf(){
 }
 
 /* ---------- 拍 → 秒 ---------- */
-const spb = () => 60 / S.bpm;
+const spb = () => 60 / ((['countin','play','result'].includes(S.phase)&&S.trialBpm)?S.trialBpm:S.bpm);
 
 /* ---------- 出題 ---------- */
 function newQuestion(){
-  if(S.fixedEv){
-    S.ev = S.fixedEv.map(e=>Object.assign({},e));       // 自作・リンクの問題はそのまま
-  } else {
-    S.ev = genEvents();                                  // 拍子に合わせて作る
-  }
+  if(S.fixedEv){S.ev=S.fixedEv.map(e=>({...e}));S.coverageNote='';}
+  else{const question=generateCoveredQuestion();if(!question){exitPlay();return;}S.ev=question[0];}
   S.expected = evOnsets(S.ev);
   S.reps = 1;
   S.taps = [];
@@ -1510,6 +1511,7 @@ async function start(){
   await Audio_.ensure();
   Audio_.clear();
   S.taps = [];
+  S.trialBpm=S.bpm;
   S.phase = 'countin';
   el.padL.classList.remove('dead');
   el.main.textContent = 'やめる';
@@ -1618,6 +1620,7 @@ function stopAll(){
 
 /* ---------- 入力 ---------- */
 function onTap(ev, pad){
+  const t=eventAudioTime(ev);
   if(ev.isPrimary === false) return;      // 最初の指だけ
   if(pad){
     const r = pad.getBoundingClientRect();
@@ -1626,8 +1629,7 @@ function onTap(ev, pad){
     rip.style.left=(ev.clientX-r.left)+'px'; rip.style.top=(ev.clientY-r.top)+'px';
     pad.appendChild(rip); setTimeout(()=>rip.remove(), 460);
   }
-  if(S.phase==='calib'){ calibTap(); return; }
-  const t = Audio_.now();
+  if(S.phase==='calib'){ calibTap(t); return; }
   /* 本編に入る判定は毎フレームの見回りでやっているので、1拍目ちょうどに叩くと
      まだ countin のまま捨てられることがあった。開始の少し前から受け付ける。
      （早すぎるタップは判定の窓で落ちるので、拾っておくのが正しい） */
@@ -1639,49 +1641,47 @@ function onTap(ev, pad){
   }
   if(S.phase!=='play') return;
   S.taps.push(t);
-  if(S.tapSound) Audio_.click(t + 0.005, 'tap');
+  if(S.tapSound) Audio_.click(Math.max(Audio_.now(),t) + 0.005, 'tap');
   markHit(t);
 }
 /* 叩いたタイミングを譜面の上に出す。
    ・叩いた瞬間は「叩いた事実」だけ（正誤の色は出さない。演奏中に評価すると注意がそちらへ向く）
-   ・印の横位置は、実際に叩いた時刻。ズレを拡大して置くので、早い/遅いが目で見える
+   ・印の横位置は、校正を反映した入力時刻。譜面と同じ時間の縮尺で置く
    ・演奏が終わってから、結果に応じて色が付く */
-const HIT_ZOOM = 3.2;                    // ズレを何倍に拡大して見せるか
-function markHit(t){
-  if(!S.marks || !S.marks.length || !S.t0) return;
-  const beat = spb();
-  const posBeat = (t - S.t0) / beat;                    // 叩いた位置（主拍単位）
-  let best=null, bd=1e9;
-  S.marks.forEach(m=>{
-    const mb = m.t / MT.beat;
-    const d = Math.abs(mb - posBeat);
-    if(d < bd){ bd = d; best = m; }
-  });
-  if(!best || bd > 1.2) return;                          // どの音符からも遠すぎる
-  const bestBeat = best.t / MT.beat;
-  // 隣の音符までの間隔を基準に、ズレを拡大して横へずらす
-  let gap = 1;
-  S.marks.forEach(m=>{ const d=Math.abs(m.t/MT.beat - bestBeat); if(d>0.001 && d<gap) gap=d; });
-  const pxPerBeat = 26 / Math.max(gap, 0.25);
-  const dx = Math.max(-22, Math.min(22, (posBeat - bestBeat) * pxPerBeat * HIT_ZOOM));
-  const ns='http://www.w3.org/2000/svg';
-  const g=document.createElementNS(ns,'g');
-  g.setAttribute('class','hitmark');
-  g.dataset.t = String(t);          // 叩いた時刻。結果の色付けで突き合わせる
-  const c=document.createElementNS(ns,'circle');
-  c.setAttribute('cx', best.x + dx); c.setAttribute('cy', best.y + 32);   // 口唱歌の少し下
-  c.setAttribute('r', 4.2); c.setAttribute('fill','currentColor'); c.setAttribute('opacity','.42');
-  g.appendChild(c);
-  el.score.appendChild(g);
-  // 叩いた瞬間、いちばん近い音符を光らせる
-  const ring=document.createElementNS(ns,'circle');
-  ring.setAttribute('cx', best.x); ring.setAttribute('cy', best.y);
-  ring.setAttribute('r', 9); ring.setAttribute('fill','none');
-  ring.setAttribute('stroke','currentColor'); ring.setAttribute('stroke-width','2'); ring.setAttribute('opacity','.5');
-  ring.setAttribute('class','hitring');
-  el.score.appendChild(ring);
-  setTimeout(()=>ring.remove(), 260);
+// Capture the event time before layout work; retain the existing audio-clock/calibration model.
+function eventAudioTime(ev){
+  const audioNow=Audio_.now();
+  if(typeof performance==='undefined'||typeof performance.now!=='function')return audioNow;
+  let stamp=Number(ev&&ev.timeStamp);const now=performance.now();
+  if(stamp>1e12&&Number.isFinite(performance.timeOrigin))stamp-=performance.timeOrigin;
+  const delay=now-stamp;
+  return Number.isFinite(stamp)&&stamp>0&&delay>=0&&delay<2000?audioNow-delay/1000:audioNow;
 }
+function scorePoint(tick,geometry,marks){
+  if(!geometry||!geometry.length)return null;
+  let seg=geometry.find(g=>tick>=g.t0&&tick<g.t1)|| (tick<geometry[0].t0?geometry[0]:geometry[geometry.length-1]);
+  let nearest=null,dist=Infinity;
+  for(const m of marks||[]){if(m.tie)continue;const d=Math.abs(m.t-tick);if(d<dist){nearest=m;dist=d;}}
+  // A slightly early first note of a new row belongs with that note, not the previous row.
+  if(nearest&&nearest.row!==seg.row&&dist<MT.beat*.25){seg=geometry.find(g=>nearest.t>=g.t0&&nearest.t<g.t1)||seg;}
+  const x=seg.x0+(tick-seg.t0)/(seg.t1-seg.t0)*(seg.x1-seg.x0);
+  return {x:Math.max(seg.minX,Math.min(seg.maxX,x)),y:seg.y,row:seg.row,nearest:dist<=MT.beat*.3?nearest:null};
+}
+function markHit(t){
+  if(!S.t0)return;
+  const tick=(t-(S.calib||0)-S.t0)/spb()*MT.beat;
+  const point=scorePoint(tick,S.geometry,S.marks);if(!point)return;
+  const ns='http://www.w3.org/2000/svg',g=document.createElementNS(ns,'g');
+  g.setAttribute('class','hitmark');g.dataset.t=String(t);
+  const c=document.createElementNS(ns,'circle');c.setAttribute('cx',point.x);c.setAttribute('cy',point.y+32);
+  c.setAttribute('r',4.2);c.setAttribute('fill','currentColor');c.setAttribute('opacity','.42');g.appendChild(c);el.score.appendChild(g);
+  if(point.nearest){const ring=document.createElementNS(ns,'circle'),m=point.nearest;
+    ring.setAttribute('cx',m.x);ring.setAttribute('cy',m.y);ring.setAttribute('r',9);ring.setAttribute('fill','none');
+    ring.setAttribute('stroke','currentColor');ring.setAttribute('stroke-width','2');ring.setAttribute('opacity','.5');ring.setAttribute('class','hitring');
+    el.score.appendChild(ring);setTimeout(()=>ring.remove(),260);
+  }
+}
+
 /* お手本にも、叩いたときと同じ丸を出す。
    ・音だけだと「どの音符が今鳴ったか」を耳で追える子にしか届かない
    ・色は自分の印と変える（お手本＝アクセント色）。自分の番に入る前に消す */
@@ -1824,7 +1824,7 @@ function finish(){
   const ok = structOK && outside.length===0 && !bigPhase;
 
   S.results.push(ok);
-  S.history.push({ts:Date.now(), ok, bars:S.bars, bpm:S.bpm, cond:S.cond,
+  S.history.push({ts:Date.now(), ok, bars:S.bars, bpm:S.trialBpm||S.bpm, cond:S.cond,
     miss:res.missed.length, extra:res.extra.length,
     phase:Math.round(phase*1000), slope: sl===null?null:Math.round(sl*1000*10)/10,
     mad:Math.round(spread*1000)});
@@ -1939,7 +1939,7 @@ const LEVELS_SIMPLE = [
   {n:11,cells:['q','ee','t3'],                d:'3連符（1拍を3つ）',      demo:[[12],[6,6],[4,4,4]]},
   {n:12,cells:['q','ee','t3q'],               d:'3連符（2拍を3つ）',      demo:[[12],[8,8,8]]},
   {n:13,cells:['q','ee','ss','dt','qr','re','t3','t3q'],
-                                              d:'ぜんぶ（3連も）',        demo:[[12],[6,6],[3,3,3,3],[4,4,4],[8,8,8]]}
+                                              d:'ランダム（3連も）', random:true, demo:[[12],[6,6],[3,3,3,3],[4,4,4],[8,8,8]]}
 ];
 /* 6/8・9/8・12/8 用。1拍は8分音符で、8分3つがひとまとまり */
 const LEVELS_COMPOUND = [
@@ -2069,10 +2069,12 @@ function buildLevels(){
     </button>`;
   box.innerHTML = makeCard + levelSet().map(L=>{
     const g = glyphRow(L.demo || [[12]]);
+    const possible=findCoveragePlan(L,QUESTION_VOICES,1);
     const done = (S.cleared||[]).includes(L.n) ? '<div class="done">できた</div>' : '';
-    return `<button class="lv" data-lv="${L.n}">
+    return `<button class="lv" data-lv="${L.n}" ${possible?'':'disabled'}>
       <div class="h"><div class="n">レベル ${L.n}</div><div class="d">${L.d}</div>${done}</div>
       <div class="ex" style="color:var(--accent)"><svg viewBox="${g.viewBox}">${g.svg}</svg></div>
+      ${L.random?'<div class="coveragehint">表示のリズムは候補です。すべてが出るとは限りません</div>':!possible?'<div class="coveragehint">この拍子では全種類を配置できません</div>':possible.bars>1?`<div class="coveragehint">全種類を入れるには ${possible.bars}小節以上</div>`:''}
     </button>`;
   }).join('');
   box.onclick = e=>{
@@ -2128,6 +2130,7 @@ function buildMeterSeg(){
 
 /* --- 画面の出入り --- */
 function enterPlay(lv){
+  if(!findCoveragePlan(levelSet().find(l=>l.n===lv)||levelSet()[0],QUESTION_VOICES,1))return;
   S.fixedEv = null;
   S.level = lv;
   const set = levelSet();
@@ -2208,10 +2211,9 @@ async function startCalib(){
     calRaf=requestAnimationFrame(w); };
   calRaf=requestAnimationFrame(w);
 }
-function calibTap(){
-  const t = Audio_.now();
+function calibTap(t=Audio_.now()){
   calBuf.push(t);
-  if(S.tapSound) Audio_.click(t+0.005,'tap');
+  if(S.tapSound) Audio_.click(Math.max(Audio_.now(),t)+0.005,'tap');
   el.hitote.textContent = `残り ${Math.max(0, 20-calBuf.length)} 回`;
   if(calBuf.length>=20) endCalib(0.6);
 }
@@ -2403,7 +2405,7 @@ function boot(){
     if(e.code!=='Space' || e.repeat || e.isComposing) return;
     e.preventDefault();
     const p2=$('#padL'), r=p2.getBoundingClientRect();
-    onTap({clientX:r.left+r.width/2, clientY:r.top+r.height/2, isPrimary:true}, p2);
+    onTap({clientX:r.left+r.width/2, clientY:r.top+r.height/2, isPrimary:true,timeStamp:e.timeStamp}, p2);
   });
 
   document.addEventListener('visibilitychange', ()=>{
